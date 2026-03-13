@@ -9,6 +9,7 @@ use App\Models\Store;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -29,6 +30,7 @@ class AdminPanelTest extends TestCase
     public function test_admin_can_manage_tenants_stores_categories_products_and_images(): void
     {
         Storage::fake('public');
+        Http::fake();
         $this->withoutMiddleware(VerifyCsrfToken::class);
 
         $this->post(route('admin.tenants.store'), [

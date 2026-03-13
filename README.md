@@ -38,6 +38,8 @@ Web routes:
 - `/admin/categories` category management
 - `/admin/products` product management
 - `/dashboard/{tenant}` tenant dashboard
+- `/stores/{store}/products/{product}` public product landing page for catalog links
+- `/feeds/meta-products` Meta-ready CSV product feed
 - `/pay/{payment}` payment checkout page
 
 API routes:
@@ -68,6 +70,28 @@ For the best WhatsApp storefront experience, configure these in admin:
 - Product `meta_retailer_id` in `/admin/products`
 
 When those are present, `Visit Store` sends a native WhatsApp multi-product catalog message so the customer sees the store as a full in-chat storefront instead of separate product cards.
+
+## Meta catalog feed
+
+Meta can ingest product data from:
+
+- `GET /feeds/meta-products`
+
+The feed exports active products from active stores in CSV format using Meta's catalog columns, including:
+
+- `id`, `title`, `description`, `availability`, `price`
+- product page `link`
+- product or store `image_link`
+- brand, category, inventory, and sale fields when available
+
+The feed file is also written to the public disk at `storage/app/public/feeds/meta-products.csv`.
+
+Product changes are synchronized automatically:
+
+- on create/update, the app rewrites the CSV and sends an `UPDATE` request to Meta's Catalog Batch API
+- on delete, the app rewrites the CSV and sends a `DELETE` request to Meta's Catalog Batch API
+
+The real-time sync uses the store's `meta_catalog_id` and `meta_access_token`, with the global WhatsApp token as a fallback if needed.
 
 ## Setup
 

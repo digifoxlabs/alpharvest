@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Product;
 use App\Models\Store;
 use App\Models\Tenant;
 use App\Services\AgentInboxService;
@@ -31,6 +32,16 @@ class PlatformController extends Controller
         return view('dashboard', [
             'tenant' => $tenant,
             'overview' => $this->inbox->tenantOverview($tenant),
+        ]);
+    }
+
+    public function product(Store $store, Product $product): View
+    {
+        abort_unless($product->store_id === $store->id, 404);
+
+        return view('product', [
+            'store' => $store,
+            'product' => $product->loadMissing('category'),
         ]);
     }
 }
