@@ -1,0 +1,112 @@
+# AlphaHarvest WhatsApp Store SaaS
+
+AlphaHarvest is now a Laravel 10 backend for a WhatsApp-first commerce SaaS platform. Customers can browse products, build carts, create orders, and receive payment links directly from a WhatsApp conversation handled through Meta's Cloud API webhook flow.
+
+## Architecture
+
+The backend follows this flow:
+
+`Customer (WhatsApp) -> WhatsApp Cloud API -> Laravel Webhook Endpoint -> Chatbot Engine / Agent Inbox / Store Engine -> MySQL -> Admin SaaS Dashboard`
+
+Core backend layers:
+
+- `WhatsAppWebhookService`: ingests Meta webhook payloads, resolves stores, stores messages, and triggers chatbot replies.
+- `ChatbotEngineService`: handles `MENU`, `ADD`, `CART`, `CHECKOUT`, and `PAY` commands.
+- `StoreEngineService`: manages catalog views, active carts, order creation, and order summaries.
+- `PaymentLinkService`: creates payment records and checkout links, and marks orders paid.
+- `AgentInboxService`: aggregates tenant-level conversation and order data for the dashboard.
+
+## Domain model
+
+The platform includes:
+
+- Multi-tenant SaaS accounts via `tenants`
+- Storefronts via `stores`
+- Catalogs via `product_categories` and `products`
+- WhatsApp shoppers via `customers`, `conversations`, and `messages`
+- Commerce flow via `carts`, `cart_items`, `orders`, `order_items`, and `payments`
+- Webhook observability via `webhook_events`
+
+## Main routes
+
+Web routes:
+
+- `/` platform overview page
+- `/admin` admin panel dashboard
+- `/admin/tenants` tenant management
+- `/admin/stores` store management
+- `/admin/categories` category management
+- `/admin/products` product management
+- `/dashboard/{tenant}` tenant dashboard
+- `/pay/{payment}` payment checkout page
+
+API routes:
+
+- `GET /api/storefront/{store}` catalog summary
+- `GET /api/storefront/{store}/products` active product list
+- `GET /api/dashboard/{tenant}/overview` dashboard data
+- `GET /api/dashboard/{tenant}/conversations` inbox feed
+- `GET /api/dashboard/{tenant}/orders` recent orders
+- `GET /api/whatsapp/webhook` Meta verification endpoint
+- `POST /api/whatsapp/webhook` incoming WhatsApp messages
+
+## Example WhatsApp commands
+
+Customers can send:
+
+- `MENU`
+- `ADD COF-250 2`
+- `CART`
+- `CHECKOUT`
+- `PAY`
+
+## Setup
+
+1. Install dependencies:
+
+```bash
+composer install
+```
+
+2. Configure `.env`:
+
+```env
+DB_CONNECTION=mysql
+DB_DATABASE=alpharvest
+DB_USERNAME=root
+DB_PASSWORD=
+
+WHATSAPP_BASE_URL=https://graph.facebook.com/v20.0
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+
+PAYMENTS_PROVIDER=manual_link
+PAYMENTS_CALLBACK_SECRET=
+```
+
+3. Run the database:
+
+```bash
+php artisan migrate --seed
+```
+
+4. Start the app:
+
+```bash
+php artisan serve
+```
+
+## Testing
+
+The feature suite covers:
+
+- Storefront catalog responses
+- WhatsApp webhook -> cart/message flow
+- Payment confirmation -> order paid flow
+
+Run tests with:
+
+```bash
+php artisan test
+```

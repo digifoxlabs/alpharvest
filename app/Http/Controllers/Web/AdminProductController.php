@@ -1,0 +1,106 @@
+<?php
+
+namespace App\Http\Controllers\Web;
+
+use App\Http\Controllers\Controller;
+use App\Models\Product;
+use App\Models\ProductCategory;
+use App\Models\Store;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+
+class AdminProductController extends Controller
+{
+    public function index(): View
+    {
+        return view('admin.products.index', [
+            'products' => Product::query()
+                ->with(['store.tenant', 'category'])
+                ->orderBy('name')
+                ->get(),
+            'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
+            'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $this->validateProduct($request);
+
+        Product::create($validated);
+
+        return redirect()
+            ->route('admin.products.index')
+            ->with('status', 'Product created.');
+    }
+
+    public function edit(Product $product): View
+    {
+        return view('admin.products.edit', [
+            'product' => $product->load('store', 'category'),
+            'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
+            'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function update(Request $request, Product $product): RedirectResponse
+    {
+        $validated = $this->validateProduct($request, $product);
+
+        $product->update($validated);
+
+        return redirect()
+            ->route('admin.products.index')
+            ->with('status', 'Product updated.');
+    }
+
+    public function destroy(Product $product): RedirectResponse
+    {
+        $product->delete();
+
+        return redirect()
+            ->route('admin.products.index')
+            ->with('status', 'Product deleted.');
+    }
+
+    protected function validateProduct(Request $request, ?Product $product = null): array
+    {
+        $storeId = (int) $request->input('store_id');
+
+        $validated = $request->validate([
+            'store_id' => ['required', 'exists:stores,id'],
+            'product_category_id' => [
+                'nullable',
+                Rule::exists('product_categories', 'id')->where(fn ($query) => $query->where('store_id', $storeId)),
+            ],
+            'name' => ['required', 'string', 'max:255'],
+            'slug' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('products', 'slug')
+                    ->where(fn ($query) => $query->where('store_id', $storeId))
+                    ->ignore($product?->id),
+            ],
+            'sku' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('products', 'sku')
+                    ->where(fn ($query) => $query->where('store_id', $storeId))
+                    ->ignore($product?->id),
+            ],
+            'description' => ['nullable', 'string'],
+            'price' => ['required', 'numeric', 'min:0'],
+            'compare_at_price' => ['nullable', 'numeric', 'min:0'],
+            'inventory_quantity' => ['required', 'integer', 'min:0'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $validated['is_active'] = $request->boolean('is_active');
+
+        return $validated;
+    }
+}
