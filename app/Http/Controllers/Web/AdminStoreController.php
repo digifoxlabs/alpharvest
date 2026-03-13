@@ -83,6 +83,7 @@ class AdminStoreController extends Controller
             'currency' => ['required', 'string', 'size:3'],
             'whatsapp_phone_number_id' => ['nullable', 'string', 'max:255', Rule::unique('stores', 'whatsapp_phone_number_id')->ignore($store?->id)],
             'whatsapp_business_account_id' => ['nullable', 'string', 'max:255'],
+            'meta_catalog_id' => ['nullable', 'string', 'max:255'],
             'meta_access_token' => ['nullable', 'string'],
             'whatsapp_brand_name' => ['nullable', 'string', 'max:255'],
             'whatsapp_welcome_text' => ['nullable', 'string', 'max:1024'],

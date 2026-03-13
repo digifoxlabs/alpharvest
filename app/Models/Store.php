@@ -24,6 +24,7 @@ class Store extends Model
         'currency',
         'whatsapp_phone_number_id',
         'whatsapp_business_account_id',
+        'meta_catalog_id',
         'meta_access_token',
         'whatsapp_brand_name',
         'whatsapp_welcome_text',

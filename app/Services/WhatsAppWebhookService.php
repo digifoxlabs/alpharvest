@@ -173,7 +173,7 @@ class WhatsAppWebhookService
     protected function messageTypeForResponse(array $response): string
     {
         return match ($response['kind'] ?? 'text') {
-            'buttons', 'image_buttons' => 'interactive',
+            'buttons', 'image_buttons', 'list', 'product_list' => 'interactive',
             default => 'text',
         };
     }

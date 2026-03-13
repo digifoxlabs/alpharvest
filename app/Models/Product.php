@@ -18,6 +18,7 @@ class Product extends Model
         'name',
         'slug',
         'sku',
+        'meta_retailer_id',
         'description',
         'image_path',
         'price',

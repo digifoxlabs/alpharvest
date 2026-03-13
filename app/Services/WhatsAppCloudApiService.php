@@ -101,11 +101,73 @@ class WhatsAppCloudApiService
         ]);
     }
 
-    public function sendMessages(Store $store, Customer $customer, array $messages): array
-    {
-        return collect($messages)
-            ->map(fn (array $message) => $this->sendStructuredMessage($store, $customer, $message))
-            ->all();
+    public function sendListMessage(
+        Store $store,
+        Customer $customer,
+        string $body,
+        string $buttonText,
+        array $sections,
+        ?string $footer = null,
+        ?string $headerText = null
+    ): array {
+        $interactive = [
+            'type' => 'list',
+            'body' => ['text' => $body],
+            'action' => [
+                'button' => $buttonText,
+                'sections' => $sections,
+            ],
+        ];
+
+        if ($footer) {
+            $interactive['footer'] = ['text' => $footer];
+        }
+
+        if ($headerText) {
+            $interactive['header'] = [
+                'type' => 'text',
+                'text' => $headerText,
+            ];
+        }
+
+        return $this->dispatch($store, $customer, [
+            'type' => 'interactive',
+            'interactive' => $interactive,
+        ]);
+    }
+
+    public function sendMultiProductMessage(
+        Store $store,
+        Customer $customer,
+        string $body,
+        array $sections,
+        ?string $footer = null,
+        ?string $headerText = null
+    ): array {
+        $interactive = [
+            'type' => 'product_list',
+            'body' => ['text' => $body],
+            'action' => [
+                'catalog_id' => $store->meta_catalog_id,
+                'sections' => $sections,
+            ],
+        ];
+
+        if ($footer) {
+            $interactive['footer'] = ['text' => $footer];
+        }
+
+        if ($headerText) {
+            $interactive['header'] = [
+                'type' => 'text',
+                'text' => $headerText,
+            ];
+        }
+
+        return $this->dispatch($store, $customer, [
+            'type' => 'interactive',
+            'interactive' => $interactive,
+        ]);
     }
 
     public function sendStructuredMessage(Store $store, Customer $customer, array $message): array
@@ -129,6 +191,23 @@ class WhatsAppCloudApiService
                 ]))),
                 $message['buttons'] ?? [],
                 $message['footer'] ?? null
+            ),
+            'list' => $this->sendListMessage(
+                $store,
+                $customer,
+                $message['body'],
+                $message['button_text'] ?? 'Browse',
+                $message['sections'] ?? [],
+                $message['footer'] ?? null,
+                $message['header_text'] ?? null
+            ),
+            'product_list' => $this->sendMultiProductMessage(
+                $store,
+                $customer,
+                $message['body'],
+                $message['sections'] ?? [],
+                $message['footer'] ?? null,
+                $message['header_text'] ?? null
             ),
             default => $this->sendTextMessage($store, $customer, $message['body']),
         };

@@ -53,6 +53,7 @@ class AdminPanelTest extends TestCase
             'currency' => 'USD',
             'whatsapp_phone_number_id' => '4477889900',
             'whatsapp_business_account_id' => '99887766',
+            'meta_catalog_id' => '5544332211',
             'meta_access_token' => 'secret-token',
             'whatsapp_brand_name' => 'Northwind Store',
             'whatsapp_welcome_text' => 'Hi! Choose Visit Store, Orders, or Contact.',
@@ -84,6 +85,7 @@ class AdminPanelTest extends TestCase
             'name' => 'Daily Calm',
             'slug' => 'daily-calm',
             'sku' => 'CAL-001',
+            'meta_retailer_id' => 'catalog-CAL-001',
             'description' => 'Daily support blend.',
             'image' => UploadedFile::fake()->image('daily-calm.png'),
             'price' => '29.99',
@@ -103,6 +105,7 @@ class AdminPanelTest extends TestCase
             'name' => 'Daily Calm Plus',
             'slug' => 'daily-calm-plus',
             'sku' => 'CAL-001',
+            'meta_retailer_id' => 'catalog-CAL-001',
             'description' => 'Updated formula.',
             'price' => '31.99',
             'compare_at_price' => '36.99',
@@ -122,6 +125,7 @@ class AdminPanelTest extends TestCase
             'contact_email' => 'owner@northwind.test',
             'contact_phone' => '+15552223333',
             'whatsapp_brand_name' => 'Northwind Store',
+            'meta_catalog_id' => '5544332211',
         ]);
 
         $this->assertDatabaseHas('product_categories', [
@@ -136,6 +140,7 @@ class AdminPanelTest extends TestCase
             'product_category_id' => $category->id,
             'name' => 'Daily Calm Plus',
             'slug' => 'daily-calm-plus',
+            'meta_retailer_id' => 'catalog-CAL-001',
             'price' => 31.99,
             'inventory_quantity' => 18,
         ]);

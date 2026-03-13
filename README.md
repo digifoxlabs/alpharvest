@@ -62,6 +62,13 @@ Customers can:
 
 The current build keeps browsing and ordering inside WhatsApp, then sends a secure payment link for the final payment step. True in-chat WhatsApp payments depend on Meta payment capabilities for the connected business account.
 
+For the best WhatsApp storefront experience, configure these in admin:
+
+- Store `meta_catalog_id` in `/admin/stores`
+- Product `meta_retailer_id` in `/admin/products`
+
+When those are present, `Visit Store` sends a native WhatsApp multi-product catalog message so the customer sees the store as a full in-chat storefront instead of separate product cards.
+
 ## Setup
 
 1. Install dependencies:

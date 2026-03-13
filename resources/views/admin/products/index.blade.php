@@ -44,6 +44,11 @@
                     </label>
                 </div>
 
+                <label>
+                    Meta retailer ID
+                    <input type="text" name="meta_retailer_id" value="{{ old('meta_retailer_id') }}" placeholder="Catalog item retailer ID for WhatsApp multi-product store">
+                </label>
+
                 <div class="two-up">
                     <label>
                         Slug
@@ -94,6 +99,7 @@
                             <strong>{{ $product->name }}</strong>
                             <p class="muted">{{ $product->store?->tenant?->name }} | {{ $product->store?->name }} | {{ $product->category?->name ?: 'Uncategorized' }}</p>
                             <p class="muted">{{ $product->sku }} | {{ $product->store?->currency }} {{ number_format((float) $product->price, 2) }} | Qty {{ $product->inventory_quantity }} | {{ $product->is_active ? 'Active' : 'Inactive' }}</p>
+                            <p class="muted">Retailer ID: {{ $product->meta_retailer_id ?: 'Not linked' }}</p>
                             @if ($product->image_url)
                                 <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="thumb">
                             @endif

@@ -71,6 +71,11 @@
                 </div>
 
                 <label>
+                    Meta catalog ID
+                    <input type="text" name="meta_catalog_id" value="{{ old('meta_catalog_id') }}" placeholder="Required for native WhatsApp catalog storefront">
+                </label>
+
+                <label>
                     Meta access token
                     <textarea name="meta_access_token" placeholder="Optional store-level token">{{ old('meta_access_token') }}</textarea>
                 </label>
@@ -118,6 +123,7 @@
                             <strong>{{ $store->name }}</strong>
                             <p class="muted">{{ $store->tenant?->name }} | {{ $store->slug }} | {{ $store->currency }}</p>
                             <p class="muted">{{ $store->categories_count }} categories | {{ $store->products_count }} products | {{ $store->orders_count }} orders</p>
+                            <p class="muted">Catalog: {{ $store->meta_catalog_id ?: 'Not linked' }}</p>
                             <p class="muted">{{ $store->contact_email ?: 'No email' }} | {{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</p>
                             @if ($store->whatsapp_store_image_url)
                                 <img src="{{ $store->whatsapp_store_image_url }}" alt="{{ $store->name }}" class="thumb">

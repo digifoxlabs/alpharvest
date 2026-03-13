@@ -23,6 +23,7 @@ class StoreFactory extends Factory
             'currency' => 'USD',
             'whatsapp_phone_number_id' => (string) fake()->unique()->numberBetween(1000000, 9999999),
             'whatsapp_business_account_id' => (string) fake()->numberBetween(1000000, 9999999),
+            'meta_catalog_id' => (string) fake()->numberBetween(100000000, 999999999),
             'whatsapp_brand_name' => $name,
             'whatsapp_welcome_text' => 'Hi! Choose Visit Store, Orders, or Contact to continue.',
             'whatsapp_store_intro' => fake()->sentence(),

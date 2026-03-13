@@ -99,6 +99,7 @@ class AdminProductController extends Controller
                     ->where(fn ($query) => $query->where('store_id', $storeId))
                     ->ignore($product?->id),
             ],
+            'meta_retailer_id' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'image' => ['nullable', 'image', 'max:4096'],
             'remove_image' => ['nullable', 'boolean'],

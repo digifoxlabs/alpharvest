@@ -163,50 +163,43 @@ class ChatbotEngineService
 
     protected function storefrontMessages(Store $store): array
     {
-        $messages = [];
+        if ($this->storeEngine->canSendWhatsAppCatalog($store)) {
+            return [[
+                'kind' => 'product_list',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $this->storeEngine->storeIntroText($store),
+                'sections' => $this->storeEngine->whatsappCatalogSections($store),
+                'footer' => 'Browse the full store inside WhatsApp and add items natively to cart.',
+            ]];
+        }
 
-        $introBody = $this->storeEngine->storeIntroText($store);
+        $messages = [];
 
         if ($store->whatsapp_store_image_url) {
             $messages[] = [
                 'kind' => 'image_buttons',
                 'image_url' => $store->whatsapp_store_image_url,
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => $introBody,
+                'body' => trim(implode("\n", array_filter([
+                    $store->whatsapp_brand_name ?: $store->name,
+                    $this->storeEngine->storeIntroText($store),
+                ]))),
                 'buttons' => [
                     ['id' => 'orders', 'title' => 'Orders'],
                     ['id' => 'contact', 'title' => 'Contact'],
                     ['id' => 'checkout', 'title' => 'Checkout'],
                 ],
-                'footer' => 'Browse products below.',
-            ];
-        } else {
-            $messages[] = [
-                'kind' => 'buttons',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => $introBody,
-                'buttons' => [
-                    ['id' => 'orders', 'title' => 'Orders'],
-                    ['id' => 'contact', 'title' => 'Contact'],
-                    ['id' => 'checkout', 'title' => 'Checkout'],
-                ],
-                'footer' => 'Browse products below.',
+                'footer' => 'Opening product list.',
             ];
         }
 
-        $products = $this->storeEngine->featuredProducts($store, 4);
-
-        foreach ($products as $product) {
-            $messages[] = $this->productCardMessage($store, $product);
-        }
-
-        if ($products->isEmpty()) {
-            $messages[] = [
-                'kind' => 'buttons',
-                'body' => 'This store has no active products yet.',
-                'buttons' => $this->mainMenuButtons(),
-            ];
-        }
+        $messages[] = [
+            'kind' => 'list',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => $this->storeEngine->storeIntroText($store),
+            'button_text' => 'Browse Products',
+            'sections' => $this->storeEngine->whatsappStoreListSections($store),
+            'footer' => 'Choose a product to add it to cart.',
+        ];
 
         return $messages;
     }

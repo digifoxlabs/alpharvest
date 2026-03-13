@@ -44,6 +44,11 @@
                 </label>
             </div>
 
+            <label>
+                Meta retailer ID
+                <input type="text" name="meta_retailer_id" value="{{ old('meta_retailer_id', $product->meta_retailer_id) }}">
+            </label>
+
             <div class="two-up">
                 <label>
                     Slug

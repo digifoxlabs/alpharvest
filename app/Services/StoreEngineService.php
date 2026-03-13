@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\Store;
 use App\Support\MoneyFormatter;
 use Illuminate\Support\Collection;
@@ -42,6 +43,7 @@ class StoreEngineService
                 'whatsapp_welcome_text' => $store->whatsapp_welcome_text,
                 'whatsapp_store_intro' => $store->whatsapp_store_intro,
                 'whatsapp_store_image_url' => $store->whatsapp_store_image_url,
+                'meta_catalog_id' => $store->meta_catalog_id,
             ],
             'categories' => $categories->map(function ($category) use ($store) {
                 return [
@@ -53,6 +55,7 @@ class StoreEngineService
                         'name' => $product->name,
                         'slug' => $product->slug,
                         'sku' => $product->sku,
+                        'meta_retailer_id' => $product->meta_retailer_id,
                         'description' => $product->description,
                         'image_url' => $product->image_url,
                         'price' => $product->price,
@@ -129,6 +132,122 @@ class StoreEngineService
             ->orderByDesc('id')
             ->limit($limit)
             ->get();
+    }
+
+    public function canSendWhatsAppCatalog(Store $store): bool
+    {
+        if (! $store->meta_catalog_id) {
+            return false;
+        }
+
+        return $store->products()
+            ->where('is_active', true)
+            ->whereNotNull('meta_retailer_id')
+            ->exists();
+    }
+
+    public function whatsappCatalogSections(Store $store, int $maxSections = 10, int $maxItemsPerSection = 30): array
+    {
+        $categories = $store->categories()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->with([
+                'products' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->whereNotNull('meta_retailer_id')
+                    ->orderBy('name'),
+            ])
+            ->get()
+            ->filter(fn (ProductCategory $category) => $category->products->isNotEmpty())
+            ->take($maxSections);
+
+        $sections = $categories->map(function (ProductCategory $category) use ($maxItemsPerSection) {
+            return [
+                'title' => Str::limit($category->name, 24, ''),
+                'product_items' => $category->products
+                    ->take($maxItemsPerSection)
+                    ->map(fn (Product $product) => [
+                        'product_retailer_id' => $product->meta_retailer_id,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        })->values()->all();
+
+        if ($sections !== []) {
+            return $sections;
+        }
+
+        $products = $store->products()
+            ->where('is_active', true)
+            ->whereNotNull('meta_retailer_id')
+            ->orderBy('name')
+            ->limit($maxItemsPerSection)
+            ->get();
+
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        return [[
+            'title' => Str::limit($store->name, 24, ''),
+            'product_items' => $products->map(fn (Product $product) => [
+                'product_retailer_id' => $product->meta_retailer_id,
+            ])->values()->all(),
+        ]];
+    }
+
+    public function whatsappStoreListSections(Store $store, int $maxSections = 10, int $maxRowsPerSection = 10): array
+    {
+        $categories = $store->categories()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->with([
+                'products' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orderBy('name'),
+            ])
+            ->get()
+            ->filter(fn (ProductCategory $category) => $category->products->isNotEmpty())
+            ->take($maxSections);
+
+        $sections = $categories->map(function (ProductCategory $category) use ($store, $maxRowsPerSection) {
+            return [
+                'title' => Str::limit($category->name, 24, ''),
+                'rows' => $category->products
+                    ->take($maxRowsPerSection)
+                    ->map(fn (Product $product) => [
+                        'id' => 'add_to_cart:'.$product->id,
+                        'title' => Str::limit($product->name, 24, ''),
+                        'description' => Str::limit($product->sku.' | '.MoneyFormatter::format($product->price, $store->currency), 72, ''),
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        })->values()->all();
+
+        if ($sections !== []) {
+            return $sections;
+        }
+
+        $products = $store->products()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->limit($maxRowsPerSection)
+            ->get();
+
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        return [[
+            'title' => Str::limit($store->name, 24, ''),
+            'rows' => $products->map(fn (Product $product) => [
+                'id' => 'add_to_cart:'.$product->id,
+                'title' => Str::limit($product->name, 24, ''),
+                'description' => Str::limit($product->sku.' | '.MoneyFormatter::format($product->price, $store->currency), 72, ''),
+            ])->values()->all(),
+        ]];
     }
 
     public function findProduct(Store $store, string $lookup): ?Product

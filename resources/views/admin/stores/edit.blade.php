@@ -71,6 +71,11 @@
             </div>
 
             <label>
+                Meta catalog ID
+                <input type="text" name="meta_catalog_id" value="{{ old('meta_catalog_id', $store->meta_catalog_id) }}">
+            </label>
+
+            <label>
                 Meta access token
                 <textarea name="meta_access_token">{{ old('meta_access_token', $store->getRawOriginal('meta_access_token')) }}</textarea>
             </label>

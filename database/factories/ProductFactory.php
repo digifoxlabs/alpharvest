@@ -19,6 +19,7 @@ class ProductFactory extends Factory
             'name' => Str::title($name),
             'slug' => Str::slug($name).'-'.fake()->unique()->numberBetween(100, 999),
             'sku' => Str::upper(Str::substr(Str::slug($name, ''), 0, 3)).'-'.fake()->numberBetween(100, 999),
+            'meta_retailer_id' => 'retailer-'.fake()->unique()->numberBetween(1000, 9999),
             'description' => fake()->sentence(),
             'image_path' => null,
             'price' => fake()->randomFloat(2, 5, 150),
