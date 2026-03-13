@@ -11,6 +11,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Store;
 use App\Support\MoneyFormatter;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -35,6 +36,12 @@ class StoreEngineService
                 'description' => $store->description,
                 'currency' => $store->currency,
                 'support_phone' => $store->support_phone,
+                'contact_email' => $store->contact_email,
+                'contact_phone' => $store->contact_phone,
+                'whatsapp_brand_name' => $store->whatsapp_brand_name,
+                'whatsapp_welcome_text' => $store->whatsapp_welcome_text,
+                'whatsapp_store_intro' => $store->whatsapp_store_intro,
+                'whatsapp_store_image_url' => $store->whatsapp_store_image_url,
             ],
             'categories' => $categories->map(function ($category) use ($store) {
                 return [
@@ -42,10 +49,12 @@ class StoreEngineService
                     'slug' => $category->slug,
                     'description' => $category->description,
                     'products' => $category->products->map(fn (Product $product) => [
+                        'id' => $product->id,
                         'name' => $product->name,
                         'slug' => $product->slug,
                         'sku' => $product->sku,
                         'description' => $product->description,
+                        'image_url' => $product->image_url,
                         'price' => $product->price,
                         'formatted_price' => MoneyFormatter::format($product->price, $store->currency),
                         'inventory_quantity' => $product->inventory_quantity,
@@ -58,30 +67,68 @@ class StoreEngineService
     public function catalogText(Store $store): string
     {
         $lines = [
-            "Welcome to {$store->name}.",
-            $store->description ?: 'Browse our catalog right from WhatsApp.',
+            $this->welcomeText($store),
+            '',
+            $this->storeIntroText($store),
             '',
             'Reply with:',
-            'MENU to browse products',
-            'ADD <sku> <qty> to add an item',
-            'CART to review your cart',
-            'CHECKOUT to create your order',
-            'PAY to get your payment link',
+            'Visit Store',
+            'Orders',
+            'Contact',
             '',
             'Featured products:',
         ];
 
-        $products = $store->products()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->limit(6)
-            ->get();
-
-        foreach ($products as $product) {
+        foreach ($this->featuredProducts($store, 6) as $product) {
             $lines[] = "{$product->sku} | {$product->name} | ".MoneyFormatter::format($product->price, $store->currency);
         }
 
         return implode("\n", $lines);
+    }
+
+    public function welcomeText(Store $store): string
+    {
+        if ($store->whatsapp_welcome_text) {
+            return $store->whatsapp_welcome_text;
+        }
+
+        $brand = $store->whatsapp_brand_name ?: $store->name;
+
+        return "Hi! Welcome to {$brand}.";
+    }
+
+    public function storeIntroText(Store $store): string
+    {
+        if ($store->whatsapp_store_intro) {
+            return $store->whatsapp_store_intro;
+        }
+
+        return $store->description ?: 'Browse our products, add items to cart, and complete your order from this WhatsApp conversation.';
+    }
+
+    public function contactText(Store $store): string
+    {
+        $lines = [
+            'Store contact details:',
+            'Email: '.($store->contact_email ?: 'Not configured'),
+            'Phone: '.($store->contact_phone ?: $store->support_phone ?: 'Not configured'),
+        ];
+
+        if ($store->whatsapp_contact_text) {
+            $lines[] = '';
+            $lines[] = $store->whatsapp_contact_text;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    public function featuredProducts(Store $store, int $limit = 4): Collection
+    {
+        return $store->products()
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
     }
 
     public function findProduct(Store $store, string $lookup): ?Product
@@ -96,6 +143,14 @@ class StoreEngineService
                     ->orWhereRaw('LOWER(name) like ?', ['%'.$normalized.'%']);
             })
             ->orderBy('name')
+            ->first();
+    }
+
+    public function findProductById(Store $store, int $productId): ?Product
+    {
+        return $store->products()
+            ->where('is_active', true)
+            ->whereKey($productId)
             ->first();
     }
 
@@ -170,7 +225,7 @@ class StoreEngineService
         $cart = $this->activeCart($store, $customer, $conversation);
 
         if ($cart->items->isEmpty()) {
-            return "Your cart is empty.\nReply MENU to browse products.";
+            return "Your cart is empty.\nTap Visit Store to browse products.";
         }
 
         $lines = ['Your cart:'];
@@ -181,7 +236,7 @@ class StoreEngineService
 
         $lines[] = '';
         $lines[] = 'Total: '.MoneyFormatter::format($cart->total, $store->currency);
-        $lines[] = 'Reply CHECKOUT when you are ready.';
+        $lines[] = 'Choose Checkout when you are ready.';
 
         return implode("\n", $lines);
     }
@@ -248,6 +303,44 @@ class StoreEngineService
             ->whereIn('payment_status', ['unpaid', 'pending'])
             ->latest('id')
             ->first();
+    }
+
+    public function latestOrder(Store $store, Customer $customer): ?Order
+    {
+        return Order::query()
+            ->where('store_id', $store->id)
+            ->where('customer_id', $customer->id)
+            ->latest('id')
+            ->first();
+    }
+
+    public function currentOrderText(Store $store, Customer $customer, ?Conversation $conversation = null): string
+    {
+        $order = $this->latestOpenOrder($store, $customer)
+            ?? $this->latestOrder($store, $customer);
+
+        if ($order) {
+            $order->loadMissing('items');
+
+            $lines = [
+                "Current order: {$order->order_number}",
+                'Status: '.ucfirst(str_replace('_', ' ', $order->status)),
+                'Payment: '.ucfirst(str_replace('_', ' ', $order->payment_status)),
+                'Amount: '.MoneyFormatter::format($order->total, $order->currency),
+            ];
+
+            if ($order->items->isNotEmpty()) {
+                $lines[] = '';
+
+                foreach ($order->items as $item) {
+                    $lines[] = "{$item->quantity} x {$item->product_name} = ".MoneyFormatter::format($item->total_price, $order->currency);
+                }
+            }
+
+            return implode("\n", $lines);
+        }
+
+        return $this->cartText($store, $customer, $conversation);
     }
 
     protected function nextOrderNumber(Store $store): string

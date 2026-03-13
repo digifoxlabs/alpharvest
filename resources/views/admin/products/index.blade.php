@@ -1,14 +1,14 @@
 @extends('admin.layout', [
     'title' => 'Manage Products',
     'heading' => 'Manage products',
-    'subheading' => 'Control inventory, pricing, and store/category assignment for each sellable product.',
+    'subheading' => 'Control inventory, pricing, visuals, and cart-ready WhatsApp product cards for each sellable product.',
 ])
 
 @section('content')
     <section class="grid columns-2">
         <article class="panel">
             <h2>Create product</h2>
-            <form class="stack" method="POST" action="{{ route('admin.products.store') }}">
+            <form class="stack" method="POST" action="{{ route('admin.products.store') }}" enctype="multipart/form-data">
                 @csrf
 
                 <div class="two-up">
@@ -60,6 +60,11 @@
                     <textarea name="description">{{ old('description') }}</textarea>
                 </label>
 
+                <label>
+                    Product image
+                    <input type="file" name="image" accept="image/*">
+                </label>
+
                 <div class="two-up">
                     <label>
                         Price
@@ -89,6 +94,9 @@
                             <strong>{{ $product->name }}</strong>
                             <p class="muted">{{ $product->store?->tenant?->name }} | {{ $product->store?->name }} | {{ $product->category?->name ?: 'Uncategorized' }}</p>
                             <p class="muted">{{ $product->sku }} | {{ $product->store?->currency }} {{ number_format((float) $product->price, 2) }} | Qty {{ $product->inventory_quantity }} | {{ $product->is_active ? 'Active' : 'Inactive' }}</p>
+                            @if ($product->image_url)
+                                <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="thumb">
+                            @endif
                         </div>
                         <div class="actions">
                             <a class="button secondary" href="{{ route('admin.products.edit', $product) }}">Edit</a>

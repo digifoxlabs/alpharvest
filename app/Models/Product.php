@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -18,6 +19,7 @@ class Product extends Model
         'slug',
         'sku',
         'description',
+        'image_path',
         'price',
         'compare_at_price',
         'inventory_quantity',
@@ -28,6 +30,10 @@ class Product extends Model
     protected $casts = [
         'metadata' => 'array',
         'is_active' => 'boolean',
+    ];
+
+    protected $appends = [
+        'image_url',
     ];
 
     public function store(): BelongsTo
@@ -48,5 +54,14 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (! $this->image_path) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($this->image_path);
     }
 }

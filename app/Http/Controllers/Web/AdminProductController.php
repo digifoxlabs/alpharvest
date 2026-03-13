@@ -9,6 +9,7 @@ use App\Models\Store;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AdminProductController extends Controller
@@ -28,6 +29,7 @@ class AdminProductController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validateProduct($request);
+        $validated = $this->syncProductImage($request, $validated);
 
         Product::create($validated);
 
@@ -48,6 +50,7 @@ class AdminProductController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $validated = $this->validateProduct($request, $product);
+        $validated = $this->syncProductImage($request, $validated, $product);
 
         $product->update($validated);
 
@@ -58,6 +61,10 @@ class AdminProductController extends Controller
 
     public function destroy(Product $product): RedirectResponse
     {
+        if ($product->image_path) {
+            Storage::disk('public')->delete($product->image_path);
+        }
+
         $product->delete();
 
         return redirect()
@@ -93,6 +100,8 @@ class AdminProductController extends Controller
                     ->ignore($product?->id),
             ],
             'description' => ['nullable', 'string'],
+            'image' => ['nullable', 'image', 'max:4096'],
+            'remove_image' => ['nullable', 'boolean'],
             'price' => ['required', 'numeric', 'min:0'],
             'compare_at_price' => ['nullable', 'numeric', 'min:0'],
             'inventory_quantity' => ['required', 'integer', 'min:0'],
@@ -100,6 +109,27 @@ class AdminProductController extends Controller
         ]);
 
         $validated['is_active'] = $request->boolean('is_active');
+        $validated['remove_image'] = $request->boolean('remove_image');
+
+        return $validated;
+    }
+
+    protected function syncProductImage(Request $request, array $validated, ?Product $product = null): array
+    {
+        if (($validated['remove_image'] ?? false) && $product?->image_path) {
+            Storage::disk('public')->delete($product->image_path);
+            $validated['image_path'] = null;
+        }
+
+        if ($request->hasFile('image')) {
+            if ($product?->image_path) {
+                Storage::disk('public')->delete($product->image_path);
+            }
+
+            $validated['image_path'] = $request->file('image')->store('products', 'public');
+        }
+
+        unset($validated['image'], $validated['remove_image']);
 
         return $validated;
     }

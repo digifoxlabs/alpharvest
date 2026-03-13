@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
@@ -27,6 +28,7 @@ class AdminStoreController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validateStore($request);
+        $validated = $this->syncStoreImage($request, $validated);
 
         Store::create($validated);
 
@@ -46,6 +48,7 @@ class AdminStoreController extends Controller
     public function update(Request $request, Store $store): RedirectResponse
     {
         $validated = $this->validateStore($request, $store);
+        $validated = $this->syncStoreImage($request, $validated, $store);
 
         $store->update($validated);
 
@@ -56,6 +59,10 @@ class AdminStoreController extends Controller
 
     public function destroy(Store $store): RedirectResponse
     {
+        if ($store->whatsapp_store_image_path) {
+            Storage::disk('public')->delete($store->whatsapp_store_image_path);
+        }
+
         $store->delete();
 
         return redirect()
@@ -70,16 +77,46 @@ class AdminStoreController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', Rule::unique('stores', 'slug')->ignore($store?->id)],
             'support_phone' => ['nullable', 'string', 'max:50'],
+            'contact_email' => ['nullable', 'email', 'max:255'],
+            'contact_phone' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'currency' => ['required', 'string', 'size:3'],
             'whatsapp_phone_number_id' => ['nullable', 'string', 'max:255', Rule::unique('stores', 'whatsapp_phone_number_id')->ignore($store?->id)],
             'whatsapp_business_account_id' => ['nullable', 'string', 'max:255'],
             'meta_access_token' => ['nullable', 'string'],
+            'whatsapp_brand_name' => ['nullable', 'string', 'max:255'],
+            'whatsapp_welcome_text' => ['nullable', 'string', 'max:1024'],
+            'whatsapp_store_intro' => ['nullable', 'string', 'max:2048'],
+            'whatsapp_contact_text' => ['nullable', 'string', 'max:1024'],
+            'whatsapp_store_image' => ['nullable', 'image', 'max:4096'],
+            'remove_whatsapp_store_image' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
         $validated['currency'] = strtoupper($validated['currency']);
         $validated['is_active'] = $request->boolean('is_active');
+        $validated['remove_whatsapp_store_image'] = $request->boolean('remove_whatsapp_store_image');
+
+        return $validated;
+    }
+
+    protected function syncStoreImage(Request $request, array $validated, ?Store $store = null): array
+    {
+        if (($validated['remove_whatsapp_store_image'] ?? false) && $store?->whatsapp_store_image_path) {
+            Storage::disk('public')->delete($store->whatsapp_store_image_path);
+            $validated['whatsapp_store_image_path'] = null;
+        }
+
+        if ($request->hasFile('whatsapp_store_image')) {
+            if ($store?->whatsapp_store_image_path) {
+                Storage::disk('public')->delete($store->whatsapp_store_image_path);
+            }
+
+            $validated['whatsapp_store_image_path'] = $request->file('whatsapp_store_image')
+                ->store('whatsapp/stores', 'public');
+        }
+
+        unset($validated['whatsapp_store_image'], $validated['remove_whatsapp_store_image']);
 
         return $validated;
     }

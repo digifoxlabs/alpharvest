@@ -7,48 +7,42 @@ use App\Models\ProductCategory;
 use App\Models\Store;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class WhatsAppWebhookTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_incoming_whatsapp_message_creates_customer_cart_and_outbound_reply(): void
+    public function test_hi_message_returns_the_main_whatsapp_menu(): void
     {
+        $counter = 0;
+
         config([
             'services.whatsapp.token' => 'test-token',
             'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
         ]);
 
-        Http::fake([
-            'graph.facebook.com/*' => Http::response([
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
                 'messages' => [
-                    ['id' => 'wamid.outbound.1'],
+                    ['id' => 'wamid.outbound.'.$counter],
                 ],
-            ], 200),
-        ]);
+            ], 200);
+        });
 
         $tenant = Tenant::factory()->create();
         $store = Store::factory()->create([
             'tenant_id' => $tenant->id,
             'whatsapp_phone_number_id' => '1234567890',
             'slug' => 'chat-store',
-        ]);
-
-        $category = ProductCategory::factory()->create([
-            'store_id' => $store->id,
-            'slug' => 'wellness',
-        ]);
-
-        $product = Product::factory()->create([
-            'store_id' => $store->id,
-            'product_category_id' => $category->id,
-            'name' => 'Morning Lift Coffee',
-            'slug' => 'morning-lift-coffee',
-            'sku' => 'COF-250',
-            'price' => 18.50,
-            'inventory_quantity' => 10,
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+            'whatsapp_welcome_text' => 'Hi! Choose Visit Store, Orders, or Contact.',
         ]);
 
         $payload = [
@@ -70,7 +64,7 @@ class WhatsAppWebhookTest extends TestCase
                             'from' => '15551234567',
                             'type' => 'text',
                             'text' => [
-                                'body' => 'ADD COF-250 2',
+                                'body' => 'Hi',
                             ],
                         ]],
                     ],
@@ -80,23 +74,168 @@ class WhatsAppWebhookTest extends TestCase
 
         $response = $this->postJson('/api/whatsapp/webhook', $payload);
 
-        $response->assertOk()
-            ->assertJson(['status' => 'accepted']);
+        $response->assertOk()->assertJson(['status' => 'accepted']);
 
-        $this->assertDatabaseHas('customers', [
-            'store_id' => $store->id,
-            'phone' => '15551234567',
-            'name' => 'Riya Sharma',
-        ]);
+        Http::assertSent(function (Request $request) {
+            $buttons = collect($request->data()['interactive']['action']['buttons'] ?? [])
+                ->pluck('reply.title')
+                ->all();
 
-        $this->assertDatabaseHas('cart_items', [
-            'product_id' => $product->id,
-            'quantity' => 2,
-        ]);
+            return ($request->data()['type'] ?? null) === 'interactive'
+                && ($request->data()['interactive']['type'] ?? null) === 'button'
+                && ($request->data()['interactive']['body']['text'] ?? null) === 'Hi! Choose Visit Store, Orders, or Contact.'
+                && $buttons === ['Visit Store', 'Orders', 'Contact'];
+        });
 
         $this->assertDatabaseHas('messages', [
             'direction' => 'outbound',
-            'body' => "Morning Lift Coffee added to your cart.\nQty: 2\nCart total: USD 37.00\nReply CART or CHECKOUT.",
+            'type' => 'interactive',
+            'body' => "AlphaHarvest Store\nHi! Choose Visit Store, Orders, or Contact.\nChoose an option to continue.",
         ]);
+    }
+
+    public function test_visit_store_and_add_to_cart_flow_uses_interactive_product_cards(): void
+    {
+        Storage::fake('public');
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $storeImagePath = UploadedFile::fake()->image('store-front.png')->store('whatsapp/stores', 'public');
+        $productImagePath = UploadedFile::fake()->image('morning-lift.png')->store('products', 'public');
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+            'whatsapp_store_intro' => 'Browse our featured wellness products below.',
+            'whatsapp_store_image_path' => $storeImagePath,
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'slug' => 'wellness',
+        ]);
+
+        $product = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+            'image_path' => $productImagePath,
+        ]);
+
+        $visitStorePayload = [
+            'entry' => [[
+                'id' => 'entry-visit-store',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.visit-store',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'visit_store',
+                                    'title' => 'Visit Store',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $visitStorePayload)->assertOk();
+
+        Http::assertSent(function (Request $request) {
+            return ($request->data()['interactive']['header']['type'] ?? null) === 'image'
+                && str_contains($request->data()['interactive']['body']['text'] ?? '', 'Browse our featured wellness products below.');
+        });
+
+        Http::assertSent(function (Request $request) use ($product) {
+            $buttons = collect($request->data()['interactive']['action']['buttons'] ?? [])
+                ->pluck('reply.id')
+                ->all();
+
+            return ($request->data()['interactive']['header']['type'] ?? null) === 'image'
+                && str_contains($request->data()['interactive']['body']['text'] ?? '', 'Morning Lift Coffee')
+                && in_array('add_to_cart:'.$product->id, $buttons, true);
+        });
+
+        $addToCartPayload = [
+            'entry' => [[
+                'id' => 'entry-add-cart',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.add-to-cart',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'add_to_cart:'.$product->id,
+                                    'title' => 'Add to Cart',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $addToCartPayload)->assertOk();
+
+        $this->assertDatabaseHas('cart_items', [
+            'product_id' => $product->id,
+            'quantity' => 1,
+        ]);
+
+        Http::assertSent(function (Request $request) {
+            $buttons = collect($request->data()['interactive']['action']['buttons'] ?? [])
+                ->pluck('reply.title')
+                ->all();
+
+            return str_contains($request->data()['interactive']['body']['text'] ?? '', 'Added to cart.')
+                && $buttons === ['Checkout', 'Visit Store', 'Orders'];
+        });
     }
 }

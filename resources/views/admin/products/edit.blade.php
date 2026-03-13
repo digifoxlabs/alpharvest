@@ -1,14 +1,14 @@
 @extends('admin.layout', [
     'title' => 'Edit Product',
     'heading' => 'Edit product',
-    'subheading' => 'Update product pricing, inventory, and merchandising for '.$product->name.'.',
+    'subheading' => 'Update product pricing, inventory, media, and merchandising for '.$product->name.'.',
 ])
 
 @section('content')
     <section class="panel">
         <h2>{{ $product->name }}</h2>
 
-        <form class="stack" method="POST" action="{{ route('admin.products.update', $product) }}">
+        <form class="stack" method="POST" action="{{ route('admin.products.update', $product) }}" enctype="multipart/form-data">
             @csrf
             @method('PUT')
 
@@ -58,6 +58,23 @@
             <label>
                 Description
                 <textarea name="description">{{ old('description', $product->description) }}</textarea>
+            </label>
+
+            @if ($product->image_url)
+                <div>
+                    <p class="muted">Current product image</p>
+                    <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="thumb">
+                </div>
+            @endif
+
+            <label>
+                Replace product image
+                <input type="file" name="image" accept="image/*">
+            </label>
+
+            <label class="checkbox">
+                <input type="checkbox" name="remove_image" value="1">
+                Remove current product image
             </label>
 
             <div class="two-up">

@@ -259,6 +259,16 @@
             align-items: center;
         }
 
+        .thumb {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            margin-top: 12px;
+            background: white;
+        }
+
         .flash {
             padding: 14px 18px;
             border-radius: 18px;

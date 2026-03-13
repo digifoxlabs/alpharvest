@@ -104,14 +104,14 @@ class WhatsAppWebhookService
             ]);
         }
 
-        $body = $this->extractBody($message);
+        $inbound = $this->extractInboundPayload($message);
 
         Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'inbound',
             'type' => Arr::get($message, 'type', 'text'),
             'whatsapp_message_id' => Arr::get($message, 'id'),
-            'body' => $body,
+            'body' => $inbound['body'],
             'payload' => $message,
             'sent_at' => now(),
         ]);
@@ -120,25 +120,61 @@ class WhatsAppWebhookService
             'last_message_at' => now(),
         ])->save();
 
-        $reply = $this->chatbot->reply($store, $customer, $conversation, $body);
-        $dispatch = $this->cloudApi->sendTextMessage($store, $customer, $reply);
+        $responses = $this->chatbot->reply(
+            $store,
+            $customer,
+            $conversation,
+            $inbound['body'],
+            $inbound['command']
+        );
 
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'outbound',
-            'type' => 'text',
-            'body' => $reply,
-            'payload' => $dispatch,
-            'sent_at' => now(),
-        ]);
+        foreach ($responses as $response) {
+            $dispatch = $this->cloudApi->sendStructuredMessage($store, $customer, $response);
+
+            Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'outbound',
+                'type' => $this->messageTypeForResponse($response),
+                'whatsapp_message_id' => $dispatch['message_id'] ?? null,
+                'body' => $this->bodyForResponse($response),
+                'payload' => $dispatch,
+                'sent_at' => now(),
+            ]);
+        }
     }
 
-    protected function extractBody(array $message): string
+    protected function extractInboundPayload(array $message): array
     {
-        return Arr::get($message, 'text.body')
+        $command = Arr::get($message, 'interactive.button_reply.id')
+            ?? Arr::get($message, 'interactive.list_reply.id')
+            ?? Arr::get($message, 'button.payload');
+
+        $body = Arr::get($message, 'text.body')
             ?? Arr::get($message, 'button.text')
             ?? Arr::get($message, 'interactive.button_reply.title')
             ?? Arr::get($message, 'interactive.list_reply.title')
             ?? '[unsupported message type]';
+
+        return [
+            'command' => $command,
+            'body' => $body,
+        ];
+    }
+
+    protected function bodyForResponse(array $response): string
+    {
+        return trim(implode("\n", array_filter([
+            $response['header_text'] ?? null,
+            $response['body'] ?? null,
+            $response['footer'] ?? null,
+        ])));
+    }
+
+    protected function messageTypeForResponse(array $response): string
+    {
+        return match ($response['kind'] ?? 'text') {
+            'buttons', 'image_buttons' => 'interactive',
+            default => 'text',
+        };
     }
 }

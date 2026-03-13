@@ -8,6 +8,8 @@ use App\Models\ProductCategory;
 use App\Models\Store;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AdminPanelTest extends TestCase
@@ -24,8 +26,9 @@ class AdminPanelTest extends TestCase
             ->assertSee('Manage products');
     }
 
-    public function test_admin_can_manage_tenants_stores_categories_and_products(): void
+    public function test_admin_can_manage_tenants_stores_categories_products_and_images(): void
     {
+        Storage::fake('public');
         $this->withoutMiddleware(VerifyCsrfToken::class);
 
         $this->post(route('admin.tenants.store'), [
@@ -44,15 +47,25 @@ class AdminPanelTest extends TestCase
             'name' => 'Northwind Wellness',
             'slug' => 'northwind-wellness',
             'support_phone' => '+15551110000',
+            'contact_email' => 'owner@northwind.test',
+            'contact_phone' => '+15552223333',
             'description' => 'A WhatsApp wellness storefront.',
             'currency' => 'USD',
             'whatsapp_phone_number_id' => '4477889900',
             'whatsapp_business_account_id' => '99887766',
             'meta_access_token' => 'secret-token',
+            'whatsapp_brand_name' => 'Northwind Store',
+            'whatsapp_welcome_text' => 'Hi! Choose Visit Store, Orders, or Contact.',
+            'whatsapp_store_intro' => 'Browse our store in WhatsApp.',
+            'whatsapp_contact_text' => 'Support responds within one business day.',
+            'whatsapp_store_image' => UploadedFile::fake()->image('store-front.png'),
             'is_active' => '1',
         ])->assertRedirect(route('admin.stores.index'));
 
         $store = Store::query()->where('slug', 'northwind-wellness')->firstOrFail();
+
+        $this->assertNotNull($store->whatsapp_store_image_path);
+        Storage::disk('public')->assertExists($store->whatsapp_store_image_path);
 
         $this->post(route('admin.categories.store'), [
             'store_id' => $store->id,
@@ -72,6 +85,7 @@ class AdminPanelTest extends TestCase
             'slug' => 'daily-calm',
             'sku' => 'CAL-001',
             'description' => 'Daily support blend.',
+            'image' => UploadedFile::fake()->image('daily-calm.png'),
             'price' => '29.99',
             'compare_at_price' => '34.99',
             'inventory_quantity' => 25,
@@ -79,6 +93,9 @@ class AdminPanelTest extends TestCase
         ])->assertRedirect(route('admin.products.index'));
 
         $product = Product::query()->where('sku', 'CAL-001')->firstOrFail();
+
+        $this->assertNotNull($product->image_path);
+        Storage::disk('public')->assertExists($product->image_path);
 
         $this->put(route('admin.products.update', $product), [
             'store_id' => $store->id,
@@ -102,6 +119,9 @@ class AdminPanelTest extends TestCase
             'id' => $store->id,
             'tenant_id' => $tenant->id,
             'name' => 'Northwind Wellness',
+            'contact_email' => 'owner@northwind.test',
+            'contact_phone' => '+15552223333',
+            'whatsapp_brand_name' => 'Northwind Store',
         ]);
 
         $this->assertDatabaseHas('product_categories', [

@@ -1,14 +1,14 @@
 @extends('admin.layout', [
     'title' => 'Manage Stores',
     'heading' => 'Manage stores',
-    'subheading' => 'Assign storefronts to tenants and configure their WhatsApp connection details.',
+    'subheading' => 'Assign storefronts to tenants, configure the WhatsApp connection, and customize how the store appears in chat.',
 ])
 
 @section('content')
     <section class="grid columns-2">
         <article class="panel">
             <h2>Create store</h2>
-            <form class="stack" method="POST" action="{{ route('admin.stores.store') }}">
+            <form class="stack" method="POST" action="{{ route('admin.stores.store') }}" enctype="multipart/form-data">
                 @csrf
 
                 <label>
@@ -50,6 +50,17 @@
 
                 <div class="two-up">
                     <label>
+                        Contact email
+                        <input type="email" name="contact_email" value="{{ old('contact_email') }}">
+                    </label>
+                    <label>
+                        Contact phone
+                        <input type="text" name="contact_phone" value="{{ old('contact_phone') }}">
+                    </label>
+                </div>
+
+                <div class="two-up">
+                    <label>
                         WhatsApp phone number ID
                         <input type="text" name="whatsapp_phone_number_id" value="{{ old('whatsapp_phone_number_id') }}">
                     </label>
@@ -62,6 +73,31 @@
                 <label>
                     Meta access token
                     <textarea name="meta_access_token" placeholder="Optional store-level token">{{ old('meta_access_token') }}</textarea>
+                </label>
+
+                <label>
+                    WhatsApp brand name
+                    <input type="text" name="whatsapp_brand_name" value="{{ old('whatsapp_brand_name') }}" placeholder="Shown in the WhatsApp menu header">
+                </label>
+
+                <label>
+                    Welcome text
+                    <textarea name="whatsapp_welcome_text" placeholder="Message shown when the customer says Hi">{{ old('whatsapp_welcome_text') }}</textarea>
+                </label>
+
+                <label>
+                    Store intro
+                    <textarea name="whatsapp_store_intro" placeholder="Message shown when customer taps Visit Store">{{ old('whatsapp_store_intro') }}</textarea>
+                </label>
+
+                <label>
+                    Contact note
+                    <textarea name="whatsapp_contact_text" placeholder="Optional note shown with email and phone">{{ old('whatsapp_contact_text') }}</textarea>
+                </label>
+
+                <label>
+                    WhatsApp store image
+                    <input type="file" name="whatsapp_store_image" accept="image/*">
                 </label>
 
                 <label class="checkbox">
@@ -82,6 +118,10 @@
                             <strong>{{ $store->name }}</strong>
                             <p class="muted">{{ $store->tenant?->name }} | {{ $store->slug }} | {{ $store->currency }}</p>
                             <p class="muted">{{ $store->categories_count }} categories | {{ $store->products_count }} products | {{ $store->orders_count }} orders</p>
+                            <p class="muted">{{ $store->contact_email ?: 'No email' }} | {{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</p>
+                            @if ($store->whatsapp_store_image_url)
+                                <img src="{{ $store->whatsapp_store_image_url }}" alt="{{ $store->name }}" class="thumb">
+                            @endif
                         </div>
                         <div class="actions">
                             <a class="button secondary" href="{{ route('admin.stores.edit', $store) }}">Edit</a>

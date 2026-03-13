@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Facades\Storage;
 
 class Store extends Model
 {
@@ -17,11 +18,18 @@ class Store extends Model
         'name',
         'slug',
         'support_phone',
+        'contact_email',
+        'contact_phone',
         'description',
         'currency',
         'whatsapp_phone_number_id',
         'whatsapp_business_account_id',
         'meta_access_token',
+        'whatsapp_brand_name',
+        'whatsapp_welcome_text',
+        'whatsapp_store_intro',
+        'whatsapp_contact_text',
+        'whatsapp_store_image_path',
         'settings',
         'is_active',
     ];
@@ -33,6 +41,10 @@ class Store extends Model
     protected $casts = [
         'settings' => 'array',
         'is_active' => 'boolean',
+    ];
+
+    protected $appends = [
+        'whatsapp_store_image_url',
     ];
 
     public function getRouteKeyName(): string
@@ -73,5 +85,14 @@ class Store extends Model
     public function payments(): HasManyThrough
     {
         return $this->hasManyThrough(Payment::class, Order::class);
+    }
+
+    public function getWhatsappStoreImageUrlAttribute(): ?string
+    {
+        if (! $this->whatsapp_store_image_path) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($this->whatsapp_store_image_path);
     }
 }

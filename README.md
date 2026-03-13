@@ -11,7 +11,7 @@ The backend follows this flow:
 Core backend layers:
 
 - `WhatsAppWebhookService`: ingests Meta webhook payloads, resolves stores, stores messages, and triggers chatbot replies.
-- `ChatbotEngineService`: handles `MENU`, `ADD`, `CART`, `CHECKOUT`, and `PAY` commands.
+- `ChatbotEngineService`: handles `Hi`, `Visit Store`, `Orders`, `Contact`, add-to-cart actions, checkout, and payment prompts.
 - `StoreEngineService`: manages catalog views, active carts, order creation, and order summaries.
 - `PaymentLinkService`: creates payment records and checkout links, and marks orders paid.
 - `AgentInboxService`: aggregates tenant-level conversation and order data for the dashboard.
@@ -50,15 +50,17 @@ API routes:
 - `GET /api/whatsapp/webhook` Meta verification endpoint
 - `POST /api/whatsapp/webhook` incoming WhatsApp messages
 
-## Example WhatsApp commands
+## Example WhatsApp experience
 
-Customers can send:
+Customers can:
 
-- `MENU`
-- `ADD COF-250 2`
-- `CART`
-- `CHECKOUT`
-- `PAY`
+- send `Hi` and receive `Visit Store`, `Orders`, and `Contact` buttons
+- tap `Visit Store` and receive WhatsApp product cards with images, price, and `Add to Cart`
+- tap `Orders` to see the current cart or active order
+- tap `Contact` to see store email and contact number
+- use `Add to Cart`, `Checkout`, and `Pay Now` from the WhatsApp flow
+
+The current build keeps browsing and ordering inside WhatsApp, then sends a secure payment link for the final payment step. True in-chat WhatsApp payments depend on Meta payment capabilities for the connected business account.
 
 ## Setup
 
@@ -91,7 +93,13 @@ PAYMENTS_CALLBACK_SECRET=
 php artisan migrate --seed
 ```
 
-4. Start the app:
+4. Expose uploaded product/store images:
+
+```bash
+php artisan storage:link
+```
+
+5. Start the app:
 
 ```bash
 php artisan serve

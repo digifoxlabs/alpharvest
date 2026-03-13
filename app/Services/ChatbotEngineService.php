@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Product;
 use App\Models\Store;
 use App\Support\MoneyFormatter;
 use Illuminate\Support\Str;
@@ -16,73 +18,303 @@ class ChatbotEngineService
     ) {
     }
 
-    public function reply(Store $store, Customer $customer, Conversation $conversation, string $incomingText): string
-    {
-        $normalized = Str::of($incomingText)->trim()->lower()->squish()->toString();
+    public function reply(
+        Store $store,
+        Customer $customer,
+        Conversation $conversation,
+        string $incomingText,
+        ?string $incomingCommand = null
+    ): array {
+        $command = $this->normalizeCommand($incomingCommand ?: $incomingText);
+        $text = Str::of($incomingText)->trim()->lower()->squish()->toString();
 
-        if ($normalized === '' || in_array($normalized, ['hi', 'hello', 'hey', 'menu', 'catalog', 'browse', 'products'], true)) {
-            return $this->storeEngine->catalogText($store);
+        if ($this->isGreeting($command, $text)) {
+            return [$this->mainMenuMessage($store)];
         }
 
-        if ($normalized === 'help') {
-            return $this->storeEngine->catalogText($store);
+        if (in_array($command, ['visit_store', 'menu', 'browse', 'products', 'storefront'], true)) {
+            return $this->storefrontMessages($store);
         }
 
-        if ($normalized === 'cart') {
-            return $this->storeEngine->cartText($store, $customer, $conversation);
+        if (in_array($command, ['orders', 'current_order', 'cart'], true)) {
+            return $this->orderMessages($store, $customer, $conversation);
         }
 
-        if ($normalized === 'checkout') {
+        if ($command === 'contact') {
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $this->storeEngine->contactText($store),
+                'buttons' => $this->mainMenuButtons(),
+                'footer' => 'Need anything else?',
+            ]];
+        }
+
+        if ($command === 'checkout') {
             $order = $this->storeEngine->checkout($store, $customer, $conversation);
 
             if (! $order) {
-                return "Your cart is empty.\nReply MENU to see products before checkout.";
+                return [[
+                    'kind' => 'buttons',
+                    'body' => "Your cart is empty.\nTap Visit Store to add products first.",
+                    'buttons' => $this->mainMenuButtons(),
+                ]];
             }
 
-            return "Order {$order->order_number} is ready.\nAmount due: ".MoneyFormatter::format($order->total, $order->currency)."\nReply PAY to receive your payment link.";
+            return $this->checkoutMessages($store, $order);
         }
 
-        if ($normalized === 'pay') {
+        if (in_array($command, ['pay', 'pay_now'], true)) {
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->checkout($store, $customer, $conversation);
 
             if (! $order) {
-                return "There is no open order yet.\nReply ADD <sku> <qty> to start shopping.";
+                return [[
+                    'kind' => 'buttons',
+                    'body' => "There is no open order yet.\nTap Visit Store to start shopping.",
+                    'buttons' => $this->mainMenuButtons(),
+                ]];
             }
 
             $payment = $this->paymentLinks->createOrReuse($order);
 
-            return "Secure payment link for {$order->order_number}:\n{$payment->payment_url}";
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $order->order_number,
+                'body' => "Your order is ready for payment.\nAmount due: ".MoneyFormatter::format($order->total, $order->currency)."\nSecure payment link: {$payment->payment_url}",
+                'buttons' => [
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'visit_store', 'title' => 'Visit Store'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Full in-chat payments require a Meta-supported payments setup. This build currently sends a secure pay link.',
+            ]];
         }
 
-        if (Str::startsWith($normalized, 'add ')) {
-            preg_match('/^add\s+([a-z0-9\-_]+)(?:\s+(\d+))?$/i', $normalized, $matches);
+        if (Str::startsWith($command, 'add_to_cart:')) {
+            $productId = (int) Str::after($command, 'add_to_cart:');
+            $product = $this->storeEngine->findProductById($store, $productId);
+
+            return $this->handleProductAdd($store, $customer, $conversation, $product);
+        }
+
+        if (Str::startsWith($text, 'add ')) {
+            preg_match('/^add\s+([a-z0-9\-_]+)(?:\s+(\d+))?$/i', $text, $matches);
 
             $lookup = $matches[1] ?? null;
             $quantity = (int) ($matches[2] ?? 1);
+            $product = $lookup ? $this->storeEngine->findProduct($store, $lookup) : null;
 
-            if (! $lookup) {
-                return 'Use ADD <sku> <qty>. Example: ADD COF-250 2';
-            }
-
-            $product = $this->storeEngine->findProduct($store, $lookup);
-
-            if (! $product) {
-                return "I couldn't find that product.\nReply MENU to see active SKUs.";
-            }
-
-            $cart = $this->storeEngine->addToCart($store, $customer, $conversation, $product, $quantity);
-            $item = $cart->items->firstWhere('product_id', $product->id);
-
-            return "{$product->name} added to your cart.\nQty: {$item->quantity}\nCart total: ".MoneyFormatter::format($cart->total, $store->currency)."\nReply CART or CHECKOUT.";
+            return $this->handleProductAdd($store, $customer, $conversation, $product, $quantity);
         }
 
-        $suggestedProduct = $this->storeEngine->findProduct($store, $normalized);
+        $suggestedProduct = $this->storeEngine->findProduct($store, $text);
 
         if ($suggestedProduct) {
-            return "{$suggestedProduct->name} is available for ".MoneyFormatter::format($suggestedProduct->price, $store->currency).".\nReply ADD {$suggestedProduct->sku} 1 to add it.";
+            return [$this->productCardMessage($store, $suggestedProduct)];
         }
 
-        return "I can help you shop from this chat.\nReply MENU, ADD <sku> <qty>, CART, CHECKOUT, or PAY.";
+        return [[
+            'kind' => 'buttons',
+            'body' => "I can help you shop from this WhatsApp store.\nChoose one of the options below.",
+            'buttons' => $this->mainMenuButtons(),
+            'footer' => 'Visit Store, Orders, Contact',
+        ]];
+    }
+
+    protected function isGreeting(string $command, string $text): bool
+    {
+        return $command === ''
+            || in_array($command, ['hi', 'hello', 'hey', 'start'], true)
+            || in_array($text, ['hi', 'hello', 'hey', 'start'], true);
+    }
+
+    protected function normalizeCommand(string $value): string
+    {
+        return Str::of($value)
+            ->trim()
+            ->lower()
+            ->replace(' ', '_')
+            ->replace('-', '_')
+            ->squish()
+            ->replace(' ', '_')
+            ->toString();
+    }
+
+    protected function mainMenuButtons(): array
+    {
+        return [
+            ['id' => 'visit_store', 'title' => 'Visit Store'],
+            ['id' => 'orders', 'title' => 'Orders'],
+            ['id' => 'contact', 'title' => 'Contact'],
+        ];
+    }
+
+    protected function mainMenuMessage(Store $store): array
+    {
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => $this->storeEngine->welcomeText($store),
+            'buttons' => $this->mainMenuButtons(),
+            'footer' => 'Choose an option to continue.',
+        ];
+    }
+
+    protected function storefrontMessages(Store $store): array
+    {
+        $messages = [];
+
+        $introBody = $this->storeEngine->storeIntroText($store);
+
+        if ($store->whatsapp_store_image_url) {
+            $messages[] = [
+                'kind' => 'image_buttons',
+                'image_url' => $store->whatsapp_store_image_url,
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $introBody,
+                'buttons' => [
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                    ['id' => 'checkout', 'title' => 'Checkout'],
+                ],
+                'footer' => 'Browse products below.',
+            ];
+        } else {
+            $messages[] = [
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $introBody,
+                'buttons' => [
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                    ['id' => 'checkout', 'title' => 'Checkout'],
+                ],
+                'footer' => 'Browse products below.',
+            ];
+        }
+
+        $products = $this->storeEngine->featuredProducts($store, 4);
+
+        foreach ($products as $product) {
+            $messages[] = $this->productCardMessage($store, $product);
+        }
+
+        if ($products->isEmpty()) {
+            $messages[] = [
+                'kind' => 'buttons',
+                'body' => 'This store has no active products yet.',
+                'buttons' => $this->mainMenuButtons(),
+            ];
+        }
+
+        return $messages;
+    }
+
+    protected function productCardMessage(Store $store, Product $product): array
+    {
+        $body = "{$product->name}\n".MoneyFormatter::format($product->price, $store->currency);
+
+        if ($product->description) {
+            $body .= "\n".Str::limit($product->description, 90);
+        }
+
+        $message = [
+            'kind' => 'buttons',
+            'header_text' => $product->sku,
+            'body' => $body,
+            'buttons' => [
+                ['id' => 'add_to_cart:'.$product->id, 'title' => 'Add to Cart'],
+                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Select Add to Cart to continue.',
+        ];
+
+        if ($product->image_url) {
+            $message['kind'] = 'image_buttons';
+            $message['image_url'] = $product->image_url;
+        }
+
+        return $message;
+    }
+
+    protected function handleProductAdd(
+        Store $store,
+        Customer $customer,
+        Conversation $conversation,
+        ?Product $product,
+        int $quantity = 1
+    ): array {
+        if (! $product) {
+            return [[
+                'kind' => 'buttons',
+                'body' => "I couldn't find that product.\nTap Visit Store to browse the available catalog.",
+                'buttons' => $this->mainMenuButtons(),
+            ]];
+        }
+
+        $cart = $this->storeEngine->addToCart($store, $customer, $conversation, $product, $quantity);
+        $item = $cart->items->firstWhere('product_id', $product->id);
+
+        return [[
+            'kind' => 'buttons',
+            'header_text' => $product->name,
+            'body' => "Added to cart.\nQty: {$item->quantity}\nCart total: ".MoneyFormatter::format($cart->total, $store->currency),
+            'buttons' => [
+                ['id' => 'checkout', 'title' => 'Checkout'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'orders', 'title' => 'Orders'],
+            ],
+            'footer' => 'Continue shopping or complete your order.',
+        ]];
+    }
+
+    protected function orderMessages(Store $store, Customer $customer, Conversation $conversation): array
+    {
+        $body = $this->storeEngine->currentOrderText($store, $customer, $conversation);
+        $cart = $this->storeEngine->activeCart($store, $customer, $conversation);
+        $openOrder = $this->storeEngine->latestOpenOrder($store, $customer);
+
+        $buttons = $this->mainMenuButtons();
+
+        if ($openOrder) {
+            $buttons = [
+                ['id' => 'pay_now', 'title' => 'Pay Now'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ];
+        } elseif ($cart->items->isNotEmpty()) {
+            $buttons = [
+                ['id' => 'checkout', 'title' => 'Checkout'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ];
+        }
+
+        return [[
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => $body,
+            'buttons' => $buttons,
+            'footer' => 'Order details inside WhatsApp.',
+        ]];
+    }
+
+    protected function checkoutMessages(Store $store, Order $order): array
+    {
+        $payment = $this->paymentLinks->createOrReuse($order);
+
+        return [[
+            'kind' => 'buttons',
+            'header_text' => $order->order_number,
+            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nUse Pay Now for the secure payment step.",
+            'buttons' => [
+                ['id' => 'pay_now', 'title' => 'Pay Now'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => "Payment link ready: {$payment->payment_url}",
+        ]];
     }
 }
