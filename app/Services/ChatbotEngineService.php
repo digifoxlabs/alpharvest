@@ -50,6 +50,20 @@ class ChatbotEngineService
             ]];
         }
 
+        if (in_array($command, ['clear_cart', 'empty_cart'], true)) {
+            $cart = $this->storeEngine->clearCart($store, $customer, $conversation);
+
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $cart
+                    ? "Your cart has been cleared.\nTap Visit Store to start a new basket."
+                    : "There is no active cart to clear.\nTap Visit Store to browse products.",
+                'buttons' => $this->mainMenuButtons(),
+                'footer' => 'Cart updated.',
+            ]];
+        }
+
         if ($command === 'checkout') {
             $order = $this->storeEngine->checkout($store, $customer, $conversation);
 
@@ -256,13 +270,13 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $product->name,
-            'body' => "Added to cart.\nQty: {$item->quantity}\nCart total: ".MoneyFormatter::format($cart->total, $store->currency),
+            'body' => "Added to cart.\nQty for this item: {$item->quantity}\nCart items: {$cart->items->sum('quantity')}\nCart total: ".MoneyFormatter::format($cart->total, $store->currency),
             'buttons' => [
+                ['id' => 'visit_store', 'title' => 'Browse More'],
                 ['id' => 'checkout', 'title' => 'Checkout'],
-                ['id' => 'visit_store', 'title' => 'Visit Store'],
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'clear_cart', 'title' => 'Clear Cart'],
             ],
-            'footer' => 'Continue shopping or complete your order.',
+            'footer' => 'Keep adding products or checkout.',
         ]];
     }
 
@@ -282,9 +296,9 @@ class ChatbotEngineService
             ];
         } elseif ($cart->items->isNotEmpty()) {
             $buttons = [
+                ['id' => 'visit_store', 'title' => 'Browse More'],
                 ['id' => 'checkout', 'title' => 'Checkout'],
-                ['id' => 'visit_store', 'title' => 'Visit Store'],
-                ['id' => 'contact', 'title' => 'Contact'],
+                ['id' => 'clear_cart', 'title' => 'Clear Cart'],
             ];
         }
 

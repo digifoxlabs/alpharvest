@@ -350,8 +350,167 @@ class WhatsAppWebhookTest extends TestCase
                 ->all();
 
             return str_contains($request->data()['interactive']['body']['text'] ?? '', 'Added to cart.')
-                && $buttons === ['Checkout', 'Visit Store', 'Orders'];
+                && $buttons === ['Browse More', 'Checkout', 'Clear Cart'];
         });
+    }
+
+    public function test_cart_persists_across_conversations_and_can_be_cleared(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'slug' => 'wellness',
+        ]);
+
+        $productA = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
+
+        $productB = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Evening Calm Tea',
+            'slug' => 'evening-calm-tea',
+            'sku' => 'TEA-180',
+            'price' => 14.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        $sendPayload = function (string $messageId, string $buttonId, string $title) {
+            return [
+                'entry' => [[
+                    'id' => 'entry-'.$messageId,
+                    'changes' => [[
+                        'field' => 'messages',
+                        'value' => [
+                            'metadata' => [
+                                'phone_number_id' => '1234567890',
+                            ],
+                            'contacts' => [[
+                                'profile' => [
+                                    'name' => 'Riya Sharma',
+                                ],
+                            ]],
+                            'messages' => [[
+                                'id' => $messageId,
+                                'from' => '15551234567',
+                                'type' => 'interactive',
+                                'interactive' => [
+                                    'type' => 'button_reply',
+                                    'button_reply' => [
+                                        'id' => $buttonId,
+                                        'title' => $title,
+                                    ],
+                                ],
+                            ]],
+                        ],
+                    ]],
+                ]],
+            ];
+        };
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.add-a-1', 'add_to_cart:'.$productA->id, 'Add to Cart'))->assertOk();
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.add-a-2', 'add_to_cart:'.$productA->id, 'Add to Cart'))->assertOk();
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.add-b-1', 'add_to_cart:'.$productB->id, 'Add to Cart'))->assertOk();
+
+        $this->assertDatabaseHas('cart_items', [
+            'product_id' => $productA->id,
+            'quantity' => 2,
+        ]);
+
+        $this->assertDatabaseHas('cart_items', [
+            'product_id' => $productB->id,
+            'quantity' => 1,
+        ]);
+
+        $conversation = \App\Models\Conversation::query()->latest('id')->firstOrFail();
+        $conversation->update([
+            'status' => 'closed',
+        ]);
+
+        $ordersPayload = [
+            'entry' => [[
+                'id' => 'entry-orders',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.orders',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'orders',
+                                    'title' => 'Orders',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $ordersPayload)->assertOk();
+
+        $this->assertDatabaseHas('messages', [
+            'direction' => 'outbound',
+            'body' => "AlphaHarvest Store\nYour cart:\n2 x Morning Lift Coffee (COF-250) = USD 37.00\n1 x Evening Calm Tea (TEA-180) = USD 14.00\n\nTotal: USD 51.00\nChoose Checkout when you are ready.\nOrder details inside WhatsApp.",
+        ]);
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.clear-cart', 'clear_cart', 'Clear Cart'))->assertOk();
+
+        $this->assertDatabaseMissing('cart_items', [
+            'product_id' => $productA->id,
+        ]);
+
+        $this->assertDatabaseMissing('cart_items', [
+            'product_id' => $productB->id,
+        ]);
+
+        $this->assertDatabaseHas('messages', [
+            'direction' => 'outbound',
+            'body' => "AlphaHarvest Store\nYour cart has been cleared.\nTap Visit Store to start a new basket.\nCart updated.",
+        ]);
     }
 
     public function test_status_webhooks_update_outbound_message_delivery_state(): void

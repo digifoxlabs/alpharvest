@@ -325,18 +325,20 @@ class StoreEngineService
 
     public function activeCart(Store $store, Customer $customer, ?Conversation $conversation = null): Cart
     {
-        $query = Cart::query()
+        $cart = Cart::query()
             ->where('store_id', $store->id)
             ->where('customer_id', $customer->id)
-            ->where('status', 'active');
-
-        if ($conversation) {
-            $query->where('conversation_id', $conversation->id);
-        }
-
-        $cart = $query->latest('id')->first();
+            ->where('status', 'active')
+            ->latest('id')
+            ->first();
 
         if ($cart) {
+            if ($conversation && $cart->conversation_id !== $conversation->id) {
+                $cart->forceFill([
+                    'conversation_id' => $conversation->id,
+                ])->save();
+            }
+
             return $cart->load('items.product');
         }
 
@@ -347,6 +349,34 @@ class StoreEngineService
             'status' => 'active',
             'currency' => $store->currency,
         ])->load('items.product');
+    }
+
+    public function clearCart(Store $store, Customer $customer, ?Conversation $conversation = null): ?Cart
+    {
+        $cart = Cart::query()
+            ->where('store_id', $store->id)
+            ->where('customer_id', $customer->id)
+            ->where('status', 'active')
+            ->latest('id')
+            ->first();
+
+        if (! $cart) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($cart, $conversation) {
+            CartItem::query()
+                ->where('cart_id', $cart->id)
+                ->delete();
+
+            $cart->forceFill([
+                'conversation_id' => $conversation?->id ?: $cart->conversation_id,
+                'subtotal' => 0,
+                'total' => 0,
+            ])->save();
+
+            return $cart->fresh(['items.product']);
+        });
     }
 
     public function addToCart(Store $store, Customer $customer, Conversation $conversation, Product $product, int $quantity = 1): Cart
