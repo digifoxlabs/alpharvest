@@ -98,7 +98,9 @@ class TenantDashboardTest extends TestCase
             ->assertSee('Kolkata')
             ->assertSee('2 x Morning Lift Coffee')
             ->assertSee('1 x Evening Calm Tea')
-            ->assertSee('Unpaid');
+            ->assertSee('Unpaid')
+            ->assertSee('Request Address')
+            ->assertSee('Send Payment Link');
     }
 
     public function test_tenant_dashboard_can_request_address_and_send_payment_link(): void
@@ -302,7 +304,7 @@ class TenantDashboardTest extends TestCase
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'direction' => 'outbound',
-            'body' => "Northwind Wellness\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOur store team will send your payment link shortly.\nAddress saved for this order.",
+            'body' => "NORTHWIND-00001\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOur store team will send your payment link shortly.\nAddress saved for this order.",
         ]);
     }
 }

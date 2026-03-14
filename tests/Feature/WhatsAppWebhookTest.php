@@ -768,10 +768,6 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->postJson('/api/whatsapp/webhook', $addressPayload)->assertOk();
 
-        $checkoutPayload['entry'][0]['changes'][0]['value']['messages'][0]['id'] = 'wamid.inbound.checkout-2';
-
-        $this->postJson('/api/whatsapp/webhook', $checkoutPayload)->assertOk();
-
         $this->assertDatabaseHas('customers', [
             'phone' => '15551234567',
         ]);
@@ -788,6 +784,11 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertSame('Kolkata', data_get($order->metadata, 'delivery.city'));
         $this->assertSame("221B Market Road\nNear Central Metro", data_get($order->metadata, 'delivery.address'));
         $this->assertSame('unpaid', $order->payment_status);
+
+        $this->assertDatabaseHas('messages', [
+            'direction' => 'outbound',
+            'body' => "CHAT-STORE-00001\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOrder created: CHAT-STORE-00001\nOur store team will send your payment link shortly.\nAddress saved for this order.",
+        ]);
     }
 
     public function test_catalog_order_payload_creates_an_order_for_admin_follow_up(): void

@@ -142,7 +142,7 @@ class ChatbotEngineService
             }
 
             if (! $this->storeEngine->deliveryDetails($customer)['is_saved']) {
-                return [$this->promptForAddress($store, $conversation, 'Save delivery details before checkout.')];
+                return [$this->promptForAddress($store, $conversation, 'Save delivery details before checkout.', null, true)];
             }
 
             $order = $this->storeEngine->checkout($store, $customer, $conversation);
@@ -438,11 +438,18 @@ class ChatbotEngineService
         ]];
     }
 
-    protected function promptForAddress(Store $store, Conversation $conversation, ?string $prefix = null, ?int $orderId = null): array
+    protected function promptForAddress(
+        Store $store,
+        Conversation $conversation,
+        ?string $prefix = null,
+        ?int $orderId = null,
+        bool $createOrderAfterSave = false
+    ): array
     {
         $context = [
             'awaiting_address' => true,
             'address_choice_map' => null,
+            'awaiting_order_creation' => $createOrderAfterSave,
         ];
 
         if ($orderId) {
@@ -496,24 +503,35 @@ class ChatbotEngineService
 
         $customer = $this->storeEngine->saveDeliveryAddress($customer, $pincode, $city, $address);
         $requestedOrderId = (int) data_get($conversation->context, 'awaiting_order_id', 0);
+        $order = null;
+        $orderCreatedAfterSave = false;
 
         if ($requestedOrderId > 0) {
-            $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
+            $order = $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
                 ?? $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        } elseif ((bool) data_get($conversation->context, 'awaiting_order_creation', false)) {
+            $order = $this->storeEngine->checkout($store, $customer, $conversation);
+            $orderCreatedAfterSave = (bool) $order;
         } else {
-            $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+            $order = $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
         }
 
         $this->setConversationContext($conversation, [
             'awaiting_address' => false,
             'awaiting_order_id' => null,
             'address_choice_map' => null,
+            'awaiting_order_creation' => false,
         ]);
 
         return [[
             'kind' => 'buttons',
-            'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Delivery details saved.\n".$this->storeEngine->deliverySummary($customer)."\nOur store team will send your payment link shortly.",
+            'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
+            'body' => trim(implode("\n", array_filter([
+                'Delivery details saved.',
+                $this->storeEngine->deliverySummary($customer),
+                $orderCreatedAfterSave && $order ? "Order created: {$order->order_number}" : null,
+                'Our store team will send your payment link shortly.',
+            ]))),
             'buttons' => [
                 ['id' => 'orders', 'title' => 'Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
