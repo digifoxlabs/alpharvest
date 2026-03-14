@@ -295,11 +295,22 @@ class ChatbotEngineService
                 'catalog_sync_pending' => true,
             ]);
 
-            return [[
-                'kind' => 'catalog_message',
+            // return [[
+            //     'kind' => 'catalog_message',
+            //     'body' => $this->storeEngine->storeIntroText($store),
+            //     'footer' => 'Open the full store inside WhatsApp.',
+            // ]];
+
+                       return [[
+                'kind' => 'product_list',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => $this->storeEngine->storeIntroText($store),
-                'footer' => 'Open the full store inside WhatsApp.',
+                'sections' => $this->storeEngine->whatsappCatalogSections($store),
+                'footer' => 'Browse products and add them from WhatsApp.',
             ]];
+
+
+
         }
 
         $this->setConversationContext($conversation, [
@@ -313,22 +324,22 @@ class ChatbotEngineService
     {
         $messages = [];
 
-        if ($store->whatsapp_store_image_url) {
-            $messages[] = [
-                'kind' => 'image_buttons',
-                'image_url' => $store->whatsapp_store_image_url,
-                'body' => trim(implode("\n", array_filter([
-                    $store->whatsapp_brand_name ?: $store->name,
-                    $this->storeEngine->storeIntroText($store),
-                ]))),
-                'buttons' => [
-                    ['id' => 'my_orders', 'title' => 'My Orders'],
-                    ['id' => 'contact', 'title' => 'Contact'],
-                    ['id' => 'checkout', 'title' => 'Checkout'],
-                ],
-                'footer' => 'Opening product list.',
-            ];
-        }
+        // if ($store->whatsapp_store_image_url) {
+        //     $messages[] = [
+        //         'kind' => 'image_buttons',
+        //         'image_url' => $store->whatsapp_store_image_url,
+        //         'body' => trim(implode("\n", array_filter([
+        //             $store->whatsapp_brand_name ?: $store->name,
+        //             $this->storeEngine->storeIntroText($store),
+        //         ]))),
+        //         'buttons' => [
+        //             ['id' => 'my_orders', 'title' => 'My Orders'],
+        //             ['id' => 'contact', 'title' => 'Contact'],
+        //             ['id' => 'checkout', 'title' => 'Checkout'],
+        //         ],
+        //         'footer' => 'Opening product list.',
+        //     ];
+        // }
 
         $messages[] = [
             'kind' => 'list',
