@@ -35,6 +35,22 @@ class PlatformController extends Controller
         ]);
     }
 
+    public function catalog(Store $store): View
+    {
+        return view('catalog', [
+            'store' => $store->load([
+                'categories' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->with([
+                        'products' => fn ($products) => $products
+                            ->where('is_active', true)
+                            ->orderBy('name'),
+                    ]),
+            ]),
+        ]);
+    }
+
     public function product(Store $store, Product $product): View
     {
         abort_unless($product->store_id === $store->id, 404);

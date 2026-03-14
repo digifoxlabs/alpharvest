@@ -81,15 +81,79 @@ class WhatsAppWebhookTest extends TestCase
 
             return ($request->data()['type'] ?? null) === 'interactive'
                 && ($request->data()['interactive']['type'] ?? null) === 'button'
-                && ($request->data()['interactive']['body']['text'] ?? null) === 'Hi! Choose Visit Store, Orders, or Contact.'
-                && $buttons === ['Visit Store', 'Orders', 'Contact'];
+                && ($request->data()['interactive']['body']['text'] ?? null) === 'Hi! Choose Visit Store, View Catalog, or Contact.'
+                && $buttons === ['Visit Store', 'View Catalog', 'Contact'];
         });
 
         $this->assertDatabaseHas('messages', [
             'direction' => 'outbound',
             'type' => 'interactive',
-            'body' => "AlphaHarvest Store\nHi! Choose Visit Store, Orders, or Contact.\nChoose an option to continue.",
+            'body' => "AlphaHarvest Store\nHi! Choose Visit Store, View Catalog, or Contact.\nChoose an option to continue.",
         ]);
+    }
+
+    public function test_view_catalog_button_returns_a_web_catalog_link(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $payload = [
+            'entry' => [[
+                'id' => 'entry-view-catalog',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.view-catalog',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'view_catalog',
+                                    'title' => 'View Catalog',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $payload)->assertOk();
+
+        Http::assertSent(fn (Request $request) => ($request->data()['type'] ?? null) === 'text'
+            && str_contains(data_get($request->data(), 'text.body', ''), route('platform.catalog', $store)));
     }
 
     public function test_visit_store_uses_multi_product_catalog_message_when_catalog_mapping_is_configured(): void

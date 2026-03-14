@@ -44,6 +44,10 @@ class ChatbotEngineService
             return $this->storefrontMessages($store, $customer, $conversation);
         }
 
+        if (in_array($command, ['view_catalog', 'catalog'], true)) {
+            return [$this->catalogWebviewMessage($store)];
+        }
+
         if (in_array($command, ['orders', 'current_order', 'cart', 'view_cart'], true)) {
             if ($this->isCatalogSyncPending($conversation)) {
                 return [$this->catalogSyncPendingMessage($store)];
@@ -220,7 +224,7 @@ class ChatbotEngineService
             'kind' => 'buttons',
             'body' => "I can help you shop from this WhatsApp store.\nChoose one of the options below.",
             'buttons' => $this->mainMenuButtons(),
-            'footer' => 'Visit Store, Orders, Contact',
+            'footer' => 'Visit Store, View Catalog, Contact',
         ]];
     }
 
@@ -243,11 +247,20 @@ class ChatbotEngineService
             ->toString();
     }
 
+    protected function normalizeWelcomeText(string $value): string
+    {
+        return str_replace(
+            ['Visit Store, Orders, or Contact', 'Visit Store, Orders, Contact'],
+            ['Visit Store, View Catalog, or Contact', 'Visit Store, View Catalog, Contact'],
+            $value
+        );
+    }
+
     protected function mainMenuButtons(): array
     {
         return [
             ['id' => 'visit_store', 'title' => 'Visit Store'],
-            ['id' => 'orders', 'title' => 'Orders'],
+            ['id' => 'view_catalog', 'title' => 'View Catalog'],
             ['id' => 'contact', 'title' => 'Contact'],
         ];
     }
@@ -257,7 +270,7 @@ class ChatbotEngineService
         return [
             'kind' => 'buttons',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => $this->storeEngine->welcomeText($store),
+            'body' => $this->normalizeWelcomeText($this->storeEngine->welcomeText($store)),
             'buttons' => $this->mainMenuButtons(),
             'footer' => 'Choose an option to continue.',
         ];
@@ -359,6 +372,16 @@ class ChatbotEngineService
         }
 
         return $message;
+    }
+
+    protected function catalogWebviewMessage(Store $store): array
+    {
+        $catalogUrl = route('platform.catalog', $store);
+
+        return [
+            'kind' => 'text',
+            'body' => "Open the web catalog here:\n{$catalogUrl}\nThis opens the store in WhatsApp's in-app browser so we can build the custom webstore experience there next.",
+        ];
     }
 
     protected function handleProductAdd(
