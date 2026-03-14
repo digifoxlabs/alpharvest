@@ -81,18 +81,18 @@ class WhatsAppWebhookTest extends TestCase
 
             return ($request->data()['type'] ?? null) === 'interactive'
                 && ($request->data()['interactive']['type'] ?? null) === 'button'
-                && ($request->data()['interactive']['body']['text'] ?? null) === 'Hi! Choose Visit Store, View Catalog, or Contact.'
-                && $buttons === ['Visit Store', 'View Catalog', 'Contact'];
+                && ($request->data()['interactive']['body']['text'] ?? null) === 'Hi! Choose Visit Store, My Orders, or Contact.'
+                && $buttons === ['Visit Store', 'My Orders', 'Contact'];
         });
 
         $this->assertDatabaseHas('messages', [
             'direction' => 'outbound',
             'type' => 'interactive',
-            'body' => "AlphaHarvest Store\nHi! Choose Visit Store, View Catalog, or Contact.\nChoose an option to continue.",
+            'body' => "AlphaHarvest Store\nHi! Choose Visit Store, My Orders, or Contact.\nChoose an option to continue.",
         ]);
     }
 
-    public function test_view_catalog_button_returns_a_web_catalog_link(): void
+    public function test_my_orders_button_returns_last_order_status_and_payment_status(): void
     {
         $counter = 0;
 
@@ -119,9 +119,27 @@ class WhatsAppWebhookTest extends TestCase
             'whatsapp_brand_name' => 'AlphaHarvest Store',
         ]);
 
+        $customer = \App\Models\Customer::factory()->create([
+            'store_id' => $store->id,
+            'phone' => '15551234567',
+            'name' => 'Riya Sharma',
+        ]);
+
+        \App\Models\Order::create([
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'order_number' => 'CHAT-STORE-00001',
+            'status' => 'processing',
+            'payment_status' => 'pending',
+            'currency' => 'USD',
+            'subtotal' => 51.00,
+            'total' => 51.00,
+            'placed_at' => now(),
+        ]);
+
         $payload = [
             'entry' => [[
-                'id' => 'entry-view-catalog',
+                'id' => 'entry-my-orders',
                 'changes' => [[
                     'field' => 'messages',
                     'value' => [
@@ -134,14 +152,14 @@ class WhatsAppWebhookTest extends TestCase
                             ],
                         ]],
                         'messages' => [[
-                            'id' => 'wamid.inbound.view-catalog',
+                            'id' => 'wamid.inbound.my-orders',
                             'from' => '15551234567',
                             'type' => 'interactive',
                             'interactive' => [
                                 'type' => 'button_reply',
                                 'button_reply' => [
-                                    'id' => 'view_catalog',
-                                    'title' => 'View Catalog',
+                                    'id' => 'my_orders',
+                                    'title' => 'My Orders',
                                 ],
                             ],
                         ]],
@@ -152,8 +170,10 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->postJson('/api/whatsapp/webhook', $payload)->assertOk();
 
-        Http::assertSent(fn (Request $request) => ($request->data()['type'] ?? null) === 'text'
-            && str_contains(data_get($request->data(), 'text.body', ''), route('platform.catalog', $store)));
+        Http::assertSent(fn (Request $request) => ($request->data()['type'] ?? null) === 'interactive'
+            && str_contains(data_get($request->data(), 'interactive.body.text', ''), 'Current order: CHAT-STORE-00001')
+            && str_contains(data_get($request->data(), 'interactive.body.text', ''), 'Status: Processing')
+            && str_contains(data_get($request->data(), 'interactive.body.text', ''), 'Payment: Pending'));
     }
 
     public function test_visit_store_uses_multi_product_catalog_message_when_catalog_mapping_is_configured(): void

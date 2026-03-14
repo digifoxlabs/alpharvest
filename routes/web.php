@@ -16,6 +16,7 @@ Route::get('/', [PlatformController::class, 'home'])->name('platform.home');
 Route::get('/dashboard/{tenant:slug}', [PlatformController::class, 'dashboard'])->name('dashboard.show');
 Route::post('/dashboard/{tenant:slug}/orders/{order}/request-address', [TenantOrderController::class, 'requestAddress'])->name('dashboard.orders.request-address');
 Route::post('/dashboard/{tenant:slug}/orders/{order}/send-payment-link', [TenantOrderController::class, 'sendPaymentLink'])->name('dashboard.orders.send-payment-link');
+Route::post('/dashboard/{tenant:slug}/orders/{order}/status', [TenantOrderController::class, 'updateStatus'])->name('dashboard.orders.update-status');
 Route::get('/stores/{store:slug}/catalog', [PlatformController::class, 'catalog'])->name('platform.catalog');
 Route::get('/stores/{store:slug}/products/{product}', [PlatformController::class, 'product'])->name('platform.products.show');
 Route::get('/feeds/meta-products', [FeedController::class, 'metaProducts'])->name('feeds.meta-products');

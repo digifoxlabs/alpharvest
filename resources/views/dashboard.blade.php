@@ -89,6 +89,14 @@
             margin-top: 10px;
         }
         .actions form { margin: 0; }
+        .actions select {
+            padding: 8px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(17, 35, 28, 0.14);
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--ink);
+            font: inherit;
+        }
         .chip {
             display: inline-flex;
             align-items: center;
@@ -205,6 +213,20 @@
                                 <form method="POST" action="{{ route('dashboard.orders.send-payment-link', [$tenant, $order]) }}">
                                     @csrf
                                     <button class="chip" type="submit">Send Payment Link</button>
+                                </form>
+                                <form method="POST" action="{{ route('dashboard.orders.update-status', [$tenant, $order]) }}">
+                                    @csrf
+                                    <select name="status" aria-label="Order status">
+                                        @foreach (['awaiting_address', 'pending_payment', 'payment_requested', 'processing', 'completed', 'cancelled'] as $status)
+                                            <option value="{{ $status }}" @selected($order->status === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select name="payment_status" aria-label="Payment status">
+                                        @foreach (['unpaid', 'pending', 'paid', 'failed'] as $paymentStatus)
+                                            <option value="{{ $paymentStatus }}" @selected($order->payment_status === $paymentStatus)>{{ ucfirst(str_replace('_', ' ', $paymentStatus)) }}</option>
+                                        @endforeach
+                                    </select>
+                                    <button class="chip" type="submit">Update Status</button>
                                 </form>
                             </div>
                         </div>

@@ -44,11 +44,7 @@ class ChatbotEngineService
             return $this->storefrontMessages($store, $customer, $conversation);
         }
 
-        if (in_array($command, ['view_catalog', 'catalog'], true)) {
-            return [$this->catalogWebviewMessage($store)];
-        }
-
-        if (in_array($command, ['orders', 'current_order', 'cart', 'view_cart'], true)) {
+        if (in_array($command, ['orders', 'my_orders', 'current_order', 'cart', 'view_cart'], true)) {
             if ($this->isCatalogSyncPending($conversation)) {
                 return [$this->catalogSyncPendingMessage($store)];
             }
@@ -83,7 +79,7 @@ class ChatbotEngineService
                     'Please confirm the delivery address for this order.',
                 ]))),
                 'buttons' => [
-                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'visit_store', 'title' => 'Visit Store'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
@@ -119,7 +115,7 @@ class ChatbotEngineService
                 'body' => "We could not match the catalog items shared from WhatsApp to this store yet.\nPlease open Visit Store again, add products from the catalog, and share the catalog cart once more.",
                 'buttons' => [
                     ['id' => 'visit_store', 'title' => 'Visit Store'],
-                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
                 'footer' => 'Catalog sync needs another try.',
@@ -185,7 +181,7 @@ class ChatbotEngineService
                 'header_text' => $order->order_number,
                 'body' => "Your order is ready for payment.\nAmount due: ".MoneyFormatter::format($order->total, $order->currency)."\nSecure payment link: {$payment->payment_url}",
                 'buttons' => [
-                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'visit_store', 'title' => 'Visit Store'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
@@ -224,7 +220,7 @@ class ChatbotEngineService
             'kind' => 'buttons',
             'body' => "I can help you shop from this WhatsApp store.\nChoose one of the options below.",
             'buttons' => $this->mainMenuButtons(),
-            'footer' => 'Visit Store, View Catalog, Contact',
+            'footer' => 'Visit Store, My Orders, Contact',
         ]];
     }
 
@@ -250,8 +246,8 @@ class ChatbotEngineService
     protected function normalizeWelcomeText(string $value): string
     {
         return str_replace(
-            ['Visit Store, Orders, or Contact', 'Visit Store, Orders, Contact'],
-            ['Visit Store, View Catalog, or Contact', 'Visit Store, View Catalog, Contact'],
+            ['Visit Store, View Catalog, or Contact', 'Visit Store, View Catalog, Contact', 'Visit Store, Orders, or Contact', 'Visit Store, Orders, Contact'],
+            ['Visit Store, My Orders, or Contact', 'Visit Store, My Orders, Contact', 'Visit Store, My Orders, or Contact', 'Visit Store, My Orders, Contact'],
             $value
         );
     }
@@ -260,7 +256,7 @@ class ChatbotEngineService
     {
         return [
             ['id' => 'visit_store', 'title' => 'Visit Store'],
-            ['id' => 'view_catalog', 'title' => 'View Catalog'],
+            ['id' => 'my_orders', 'title' => 'My Orders'],
             ['id' => 'contact', 'title' => 'Contact'],
         ];
     }
@@ -326,7 +322,7 @@ class ChatbotEngineService
                     $this->storeEngine->storeIntroText($store),
                 ]))),
                 'buttons' => [
-                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'contact', 'title' => 'Contact'],
                     ['id' => 'checkout', 'title' => 'Checkout'],
                 ],
@@ -360,7 +356,7 @@ class ChatbotEngineService
             'body' => $body,
             'buttons' => [
                 ['id' => 'add_to_cart:'.$product->id, 'title' => 'Add to Cart'],
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
             'footer' => 'Select Add to Cart to continue.',
@@ -372,16 +368,6 @@ class ChatbotEngineService
         }
 
         return $message;
-    }
-
-    protected function catalogWebviewMessage(Store $store): array
-    {
-        $catalogUrl = route('platform.catalog', $store);
-
-        return [
-            'kind' => 'text',
-            'body' => "Open the web catalog here:\n{$catalogUrl}\nThis opens the store in WhatsApp's in-app browser so we can build the custom webstore experience there next.",
-        ];
     }
 
     protected function handleProductAdd(
@@ -425,7 +411,7 @@ class ChatbotEngineService
 
         if ($openOrder) {
             $buttons = [
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ];
@@ -453,7 +439,7 @@ class ChatbotEngineService
             'header_text' => $order->order_number,
             'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nOur store team will message you for address and payment.",
             'buttons' => [
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
@@ -556,7 +542,7 @@ class ChatbotEngineService
                 'Our store team will send your payment link shortly.',
             ]))),
             'buttons' => [
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
@@ -607,7 +593,7 @@ class ChatbotEngineService
             'buttons' => [
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
             ],
             'footer' => 'Waiting for catalog cart sync.',
         ];
@@ -664,7 +650,7 @@ class ChatbotEngineService
                 'body' => "That saved address is no longer available.\nPlease choose another address or add a new one.",
                 'buttons' => [
                     ['id' => 'new_address', 'title' => 'New Address'],
-                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
                 'footer' => 'Address selection expired.',
@@ -696,7 +682,7 @@ class ChatbotEngineService
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => "Address confirmed.\n".$this->storeEngine->deliverySummary($customer)."\nOur store team will send your payment link shortly.",
             'buttons' => [
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
@@ -712,7 +698,7 @@ class ChatbotEngineService
             'body' => $this->storeEngine->undeliverableMessage($store, $pincode, $city),
             'buttons' => [
                 ['id' => 'new_address', 'title' => 'New Address'],
-                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
             'footer' => 'Outside delivery area.',

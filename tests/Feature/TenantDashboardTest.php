@@ -100,7 +100,8 @@ class TenantDashboardTest extends TestCase
             ->assertSee('1 x Evening Calm Tea')
             ->assertSee('Unpaid')
             ->assertSee('Request Address')
-            ->assertSee('Send Payment Link');
+            ->assertSee('Send Payment Link')
+            ->assertSee('Update Status');
     }
 
     public function test_tenant_dashboard_can_request_address_and_send_payment_link(): void
@@ -196,6 +197,44 @@ class TenantDashboardTest extends TestCase
 
         Http::assertSentCount(2);
         Http::assertSent(fn (Request $request) => str_contains(data_get($request->data(), 'text.body', ''), $order->order_number));
+    }
+
+    public function test_tenant_dashboard_can_update_order_and_payment_status(): void
+    {
+        $tenant = Tenant::factory()->create([
+            'slug' => 'northwind-commerce',
+        ]);
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+        ]);
+
+        $customer = Customer::factory()->create([
+            'store_id' => $store->id,
+        ]);
+
+        $order = Order::create([
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'order_number' => 'NORTHWIND-00001',
+            'status' => 'pending_payment',
+            'payment_status' => 'unpaid',
+            'currency' => 'USD',
+            'subtotal' => 51.00,
+            'total' => 51.00,
+            'placed_at' => now(),
+        ]);
+
+        $this->post(route('dashboard.orders.update-status', [$tenant, $order]), [
+            'status' => 'completed',
+            'payment_status' => 'paid',
+        ])->assertRedirect(route('dashboard.show', $tenant));
+
+        $order->refresh();
+
+        $this->assertSame('completed', $order->status);
+        $this->assertSame('paid', $order->payment_status);
+        $this->assertNotNull($order->paid_at);
     }
 
     public function test_customer_address_reply_after_dashboard_request_is_saved_on_that_order(): void
