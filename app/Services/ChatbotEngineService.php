@@ -363,7 +363,7 @@ class ChatbotEngineService
         return [
             'kind' => 'buttons',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => $this->storeEngine->deliverySummary($customer),
+            'body' => $this->storeEngine->deliverySummary($customer)."\nUse the WhatsApp catalog cart share to sync selected catalog items here.",
             'buttons' => [
                 ['id' => 'view_cart', 'title' => 'View Cart'],
                 ['id' => 'save_address', 'title' => 'Save Address'],

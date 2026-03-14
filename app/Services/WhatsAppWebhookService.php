@@ -18,6 +18,7 @@ class WhatsAppWebhookService
     public function __construct(
         protected ChatbotEngineService $chatbot,
         protected WhatsAppCloudApiService $cloudApi,
+        protected StoreEngineService $storeEngine,
     ) {
     }
 
@@ -111,6 +112,20 @@ class WhatsAppWebhookService
 
         $inbound = $this->extractInboundPayload($message);
 
+        if (Arr::get($message, 'type') === 'order') {
+            $cart = $this->storeEngine->syncCartFromCatalogOrder(
+                $store,
+                $customer,
+                $conversation,
+                Arr::get($message, 'order', [])
+            );
+
+            if ($cart) {
+                $inbound['command'] = 'view_cart';
+                $inbound['body'] = 'Catalog cart shared';
+            }
+        }
+
         Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'inbound',
@@ -157,12 +172,35 @@ class WhatsAppWebhookService
             ?? Arr::get($message, 'button.text')
             ?? Arr::get($message, 'interactive.button_reply.title')
             ?? Arr::get($message, 'interactive.list_reply.title')
+            ?? $this->orderBody($message)
             ?? '[unsupported message type]';
 
         return [
             'command' => $command,
             'body' => $body,
         ];
+    }
+
+    protected function orderBody(array $message): ?string
+    {
+        if (Arr::get($message, 'type') !== 'order') {
+            return null;
+        }
+
+        $items = collect(Arr::get($message, 'order.product_items', []))
+            ->map(function (array $item) {
+                $retailerId = Arr::get($item, 'product_retailer_id', 'unknown');
+                $quantity = Arr::get($item, 'quantity', 1);
+
+                return $quantity.' x '.$retailerId;
+            })
+            ->all();
+
+        if ($items === []) {
+            return 'Catalog cart shared';
+        }
+
+        return "Catalog cart shared:\n".implode("\n", $items);
     }
 
     protected function bodyForResponse(array $response): string

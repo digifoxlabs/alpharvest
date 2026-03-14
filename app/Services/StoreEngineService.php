@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Store;
 use App\Support\MoneyFormatter;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -377,6 +378,20 @@ class StoreEngineService
             ->first();
     }
 
+    public function findProductByCatalogRetailerId(Store $store, string $retailerId): ?Product
+    {
+        $normalized = Str::lower(trim($retailerId));
+
+        return $store->products()
+            ->where('is_active', true)
+            ->where(function ($query) use ($normalized) {
+                $query->whereRaw('LOWER(meta_retailer_id) = ?', [$normalized])
+                    ->orWhereRaw('LOWER(sku) = ?', [$normalized]);
+            })
+            ->orderBy('name')
+            ->first();
+    }
+
     public function activeCart(Store $store, Customer $customer, ?Conversation $conversation = null): Cart
     {
         $cart = Cart::query()
@@ -459,6 +474,52 @@ class StoreEngineService
         });
     }
 
+    public function syncCartFromCatalogOrder(Store $store, Customer $customer, Conversation $conversation, array $catalogOrder): ?Cart
+    {
+        $items = collect(Arr::get($catalogOrder, 'product_items', []))
+            ->map(function (array $item) use ($store) {
+                $retailerId = (string) Arr::get($item, 'product_retailer_id', '');
+                $product = $retailerId !== '' ? $this->findProductByCatalogRetailerId($store, $retailerId) : null;
+
+                if (! $product) {
+                    return null;
+                }
+
+                $quantity = max((int) Arr::get($item, 'quantity', 1), 1);
+
+                return [
+                    'product' => $product,
+                    'quantity' => min($quantity, max($product->inventory_quantity, 1)),
+                ];
+            })
+            ->filter()
+            ->values();
+
+        if ($items->isEmpty()) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($store, $customer, $conversation, $items) {
+            $cart = $this->activeCart($store, $customer, $conversation);
+
+            CartItem::query()
+                ->where('cart_id', $cart->id)
+                ->delete();
+
+            foreach ($items as $item) {
+                CartItem::create([
+                    'cart_id' => $cart->id,
+                    'product_id' => $item['product']->id,
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $item['product']->price,
+                    'total_price' => $item['product']->price * $item['quantity'],
+                ]);
+            }
+
+            return $this->refreshCartTotals($cart);
+        });
+    }
+
     public function refreshCartTotals(Cart $cart): Cart
     {
         $cart->load('items.product');
@@ -478,7 +539,13 @@ class StoreEngineService
         $cart = $this->activeCart($store, $customer, $conversation);
 
         if ($cart->items->isEmpty()) {
-            return "Your cart is empty.\nTap Visit Store to browse products.";
+            $lines = ["Your cart is empty.\nTap Visit Store to browse products."];
+
+            if ($store->meta_catalog_id) {
+                $lines[] = 'If you selected items in the WhatsApp catalog, send the cart from the catalog first, then tap View Cart.';
+            }
+
+            return implode("\n", $lines);
         }
 
         $lines = ['Your cart:'];

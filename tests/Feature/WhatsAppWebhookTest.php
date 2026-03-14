@@ -787,4 +787,120 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertSame("221B Market Road\nKolkata", data_get($order->metadata, 'delivery.address'));
         $this->assertSame('unpaid', $order->payment_status);
     }
+
+    public function test_catalog_order_payload_syncs_native_catalog_items_into_app_cart(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'meta_catalog_id' => '5566778899',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'meta_retailer_id' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Focus Shot',
+            'slug' => 'focus-shot',
+            'sku' => 'FOC-100',
+            'meta_retailer_id' => 'FOC-100',
+            'price' => 12.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        $orderPayload = [
+            'entry' => [[
+                'id' => 'entry-native-cart',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.native-cart',
+                            'from' => '15551234567',
+                            'type' => 'order',
+                            'order' => [
+                                'catalog_id' => '5566778899',
+                                'product_items' => [
+                                    [
+                                        'product_retailer_id' => 'COF-250',
+                                        'quantity' => '2',
+                                    ],
+                                    [
+                                        'product_retailer_id' => 'FOC-100',
+                                        'quantity' => '1',
+                                    ],
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $orderPayload)->assertOk();
+
+        $this->assertDatabaseHas('cart_items', [
+            'quantity' => 2,
+            'unit_price' => 18.50,
+        ]);
+
+        $this->assertDatabaseHas('cart_items', [
+            'quantity' => 1,
+            'unit_price' => 12.00,
+        ]);
+
+        $cartMessage = \App\Models\Message::query()
+            ->where('direction', 'outbound')
+            ->where('body', 'like', '%Your cart:%')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('2 x Morning Lift Coffee (COF-250) = USD 37.00', $cartMessage->body);
+        $this->assertStringContainsString('1 x Focus Shot (FOC-100) = USD 12.00', $cartMessage->body);
+        $this->assertStringContainsString('Total: USD 49.00', $cartMessage->body);
+    }
 }
