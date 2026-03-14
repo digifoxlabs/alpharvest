@@ -121,7 +121,7 @@ class DatabaseSeeder extends Seeder
             'name' => $product['name'],
             'slug' => $product['slug'],
             'sku' => $product['sku'],
-            'meta_retailer_id' => 'catalog-'.$product['sku'],
+            'meta_retailer_id' => $product['sku'],
             'price' => $product['price'],
             'inventory_quantity' => $product['inventory'],
             'description' => $product['description'],
