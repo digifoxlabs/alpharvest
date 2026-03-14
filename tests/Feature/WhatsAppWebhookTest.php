@@ -750,7 +750,7 @@ class WhatsAppWebhookTest extends TestCase
                             'from' => '15551234567',
                             'type' => 'text',
                             'text' => [
-                                'body' => "700001\n221B Market Road\nKolkata",
+                                'body' => "700001\nKolkata\n221B Market Road\nNear Central Metro",
                             ],
                         ]],
                     ],
@@ -763,7 +763,7 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->assertDatabaseHas('messages', [
             'direction' => 'outbound',
-            'body' => "AlphaHarvest Store\nSave delivery details before checkout.\n\nSend your delivery details in this format:\n\n700001\n221B Market Road\nKolkata, West Bengal\nPincode on line 1, address below.",
+            'body' => "AlphaHarvest Store\nSave delivery details before checkout.\n\nSend your delivery details in this format:\n\n700001\nKolkata\n221B Market Road\nNear Central Metro\nPincode line 1, city line 2.",
         ]);
 
         $this->postJson('/api/whatsapp/webhook', $addressPayload)->assertOk();
@@ -779,12 +779,14 @@ class WhatsAppWebhookTest extends TestCase
         $customer = \App\Models\Customer::query()->where('phone', '15551234567')->firstOrFail();
 
         $this->assertSame('700001', data_get($customer->metadata, 'delivery.pincode'));
-        $this->assertSame("221B Market Road\nKolkata", data_get($customer->metadata, 'delivery.address'));
+        $this->assertSame('Kolkata', data_get($customer->metadata, 'delivery.city'));
+        $this->assertSame("221B Market Road\nNear Central Metro", data_get($customer->metadata, 'delivery.address'));
 
         $order = \App\Models\Order::query()->latest('id')->firstOrFail();
 
         $this->assertSame('700001', data_get($order->metadata, 'delivery.pincode'));
-        $this->assertSame("221B Market Road\nKolkata", data_get($order->metadata, 'delivery.address'));
+        $this->assertSame('Kolkata', data_get($order->metadata, 'delivery.city'));
+        $this->assertSame("221B Market Road\nNear Central Metro", data_get($order->metadata, 'delivery.address'));
         $this->assertSame('unpaid', $order->payment_status);
     }
 
@@ -916,8 +918,303 @@ class WhatsAppWebhookTest extends TestCase
             ->latest('id')
             ->firstOrFail();
 
-        $this->assertStringContainsString('Our store team will message you for address and payment.', $confirmationMessage->body);
+        $addressPromptMessage = \App\Models\Message::query()
+            ->where('direction', 'outbound')
+            ->where('body', 'like', '%Please share your delivery address for order%')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('Please confirm the delivery address for this order.', $confirmationMessage->body);
         $this->assertStringContainsString('USD 49.00', $confirmationMessage->body);
+        $this->assertStringContainsString("700001\nKolkata\n221B Market Road\nNear Central Metro", $addressPromptMessage->body);
+        $this->assertDatabaseHas('conversations', [
+            'store_id' => $store->id,
+            'customer_id' => \App\Models\Customer::query()->where('phone', '15551234567')->value('id'),
+        ]);
+    }
+
+    public function test_repeat_catalog_order_shows_saved_addresses_and_accepts_numeric_selection(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'meta_catalog_id' => '5566778899',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+            'settings' => [
+                'delivery_zones' => [
+                    ['pincode' => '700001', 'city' => 'Kolkata'],
+                    ['pincode' => '700002', 'city' => 'Howrah'],
+                ],
+            ],
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'meta_retailer_id' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
+
+        $customer = \App\Models\Customer::factory()->create([
+            'store_id' => $store->id,
+            'phone' => '15551234567',
+            'metadata' => [
+                'delivery' => [
+                    'id' => 'addr-1',
+                    'pincode' => '700001',
+                    'city' => 'Kolkata',
+                    'address' => "221B Market Road\nNear Central Metro",
+                    'saved_at' => now()->subDay()->toIso8601String(),
+                    'address_book' => [
+                        [
+                            'id' => 'addr-1',
+                            'pincode' => '700001',
+                            'city' => 'Kolkata',
+                            'address' => "221B Market Road\nNear Central Metro",
+                            'saved_at' => now()->subDay()->toIso8601String(),
+                        ],
+                        [
+                            'id' => 'addr-2',
+                            'pincode' => '700002',
+                            'city' => 'Howrah',
+                            'address' => "88 River Road\nOpposite Ferry Gate",
+                            'saved_at' => now()->subDays(2)->toIso8601String(),
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $orderPayload = [
+            'entry' => [[
+                'id' => 'entry-native-cart-repeat',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.native-cart-repeat',
+                            'from' => $customer->phone,
+                            'type' => 'order',
+                            'order' => [
+                                'catalog_id' => '5566778899',
+                                'product_items' => [[
+                                    'product_retailer_id' => 'COF-250',
+                                    'quantity' => '1',
+                                ]],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $orderPayload)->assertOk();
+
+        $listRequest = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->first(fn (Request $request) => ($request->data()['interactive']['type'] ?? null) === 'list');
+
+        $this->assertNotNull($listRequest);
+        $rows = data_get($listRequest->data(), 'interactive.action.sections.0.rows', []);
+        $rowIds = collect($rows)->pluck('id')->all();
+
+        $this->assertContains('select_address:addr-1', $rowIds);
+        $this->assertContains('select_address:addr-2', $rowIds);
+        $this->assertContains('new_address', $rowIds);
+
+        $choicePayload = [
+            'entry' => [[
+                'id' => 'entry-address-choice',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.address-choice',
+                            'from' => $customer->phone,
+                            'type' => 'text',
+                            'text' => [
+                                'body' => '2',
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $choicePayload)->assertOk();
+
+        $order = \App\Models\Order::query()->latest('id')->firstOrFail();
+        $this->assertSame('700002', data_get($order->metadata, 'delivery.pincode'));
+        $this->assertSame('Howrah', data_get($order->metadata, 'delivery.city'));
+        $this->assertSame("88 River Road\nOpposite Ferry Gate", data_get($order->metadata, 'delivery.address'));
+    }
+
+    public function test_undeliverable_address_sends_custom_store_message_and_keeps_order_waiting(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'meta_catalog_id' => '5566778899',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+            'settings' => [
+                'delivery_zones' => [
+                    ['pincode' => '700001', 'city' => 'Kolkata'],
+                ],
+                'undeliverable_message' => 'Sorry, this area is outside our delivery service zone.',
+            ],
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'meta_retailer_id' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
+
+        $orderPayload = [
+            'entry' => [[
+                'id' => 'entry-native-cart-undeliverable',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.native-cart-undeliverable',
+                            'from' => '15551234567',
+                            'type' => 'order',
+                            'order' => [
+                                'catalog_id' => '5566778899',
+                                'product_items' => [[
+                                    'product_retailer_id' => 'COF-250',
+                                    'quantity' => '1',
+                                ]],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $orderPayload)->assertOk();
+
+        $addressPayload = [
+            'entry' => [[
+                'id' => 'entry-undeliverable-address',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.undeliverable-address',
+                            'from' => '15551234567',
+                            'type' => 'text',
+                            'text' => [
+                                'body' => "500001\nHyderabad\n88 Market Street\nNear Clock Tower",
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $addressPayload)->assertOk();
+
+        $order = \App\Models\Order::query()->latest('id')->firstOrFail();
+        $this->assertSame('awaiting_address', $order->status);
+        $this->assertNull(data_get($order->metadata, 'delivery.pincode'));
+
+        $this->assertDatabaseHas('messages', [
+            'direction' => 'outbound',
+            'body' => "AlphaHarvest Store\nSorry, this area is outside our delivery service zone.\nOutside delivery area.",
+        ]);
     }
 
     public function test_view_cart_waits_for_native_catalog_sync_instead_of_showing_a_stale_fallback_cart(): void
@@ -1172,7 +1469,7 @@ class WhatsAppWebhookTest extends TestCase
             ->firstOrFail();
 
         $this->assertStringContainsString('USD 30.00', $confirmationMessage->body);
-        $this->assertStringContainsString('Our store team will message you for address and payment.', $confirmationMessage->body);
+        $this->assertStringContainsString('Please confirm the delivery address for this order.', $confirmationMessage->body);
         $this->assertStringNotContainsString('Fallback Product', $confirmationMessage->body);
     }
 }

@@ -101,6 +101,17 @@
                 </label>
 
                 <label>
+                    Deliverable areas
+                    <textarea name="delivery_zones_text" placeholder="700001 | Kolkata&#10;700002 | Howrah">{{ old('delivery_zones_text') }}</textarea>
+                    <span class="muted">One area per line. Use `pincode | city`.</span>
+                </label>
+
+                <label>
+                    Outside-delivery message
+                    <textarea name="undeliverable_message" placeholder="Sorry, this area is outside our delivery zone.">{{ old('undeliverable_message') }}</textarea>
+                </label>
+
+                <label>
                     WhatsApp store image
                     <input type="file" name="whatsapp_store_image" accept="image/*">
                 </label>
@@ -130,6 +141,7 @@
                             <p class="muted">{{ $store->tenant?->name }} | {{ $store->slug }} | {{ $store->currency }}</p>
                             <p class="muted">{{ $store->categories_count }} categories | {{ $store->products_count }} products | {{ $store->orders_count }} orders</p>
                             <p class="muted">Catalog: {{ $store->meta_catalog_id ?: 'Not linked' }}</p>
+                            <p class="muted">Deliverable areas: {{ count(data_get($store->settings, 'delivery_zones', [])) }}</p>
                             <p class="muted">{{ $store->contact_email ?: 'No email' }} | {{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</p>
                             <div class="chip-row">
                                 <span class="badge {{ $readiness['checks']['phone_number_id'] ? 'success' : 'warning' }}">Phone ID</span>

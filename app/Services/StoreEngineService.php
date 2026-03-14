@@ -131,12 +131,14 @@ class StoreEngineService
         $delivery = data_get($customer->metadata, 'delivery', []);
 
         $pincode = trim((string) ($delivery['pincode'] ?? ''));
+        $city = trim((string) ($delivery['city'] ?? ''));
         $address = trim((string) ($delivery['address'] ?? ''));
 
         return [
             'pincode' => $pincode ?: null,
+            'city' => $city ?: null,
             'address' => $address ?: null,
-            'is_saved' => $pincode !== '' && $address !== '',
+            'is_saved' => $pincode !== '' && $city !== '' && $address !== '',
         ];
     }
 
@@ -145,19 +147,82 @@ class StoreEngineService
         $delivery = $this->deliveryDetails($customer);
 
         if (! $delivery['is_saved']) {
-            return "Deliver to pincode: not saved yet.\nTap Save Address and send your pincode plus full delivery address.";
+            return "Deliver to pincode: not saved yet.\nTap Save Address and send pincode on line 1, city on line 2, and the full address below.";
         }
 
-        return "Deliver to pincode: {$delivery['pincode']}\nAddress: {$delivery['address']}";
+        return "Deliver to pincode: {$delivery['pincode']}\nCity: {$delivery['city']}\nAddress: {$delivery['address']}";
     }
 
-    public function saveDeliveryAddress(Customer $customer, string $pincode, string $address): Customer
+    public function customerAddressBook(Customer $customer): array
     {
+        return collect(data_get($customer->metadata, 'delivery.address_book', []))
+            ->map(function (array $entry) {
+                $pincode = trim((string) ($entry['pincode'] ?? ''));
+                $city = trim((string) ($entry['city'] ?? ''));
+                $address = trim((string) ($entry['address'] ?? ''));
+
+                if ($pincode === '' || $city === '' || $address === '') {
+                    return null;
+                }
+
+                return [
+                    'id' => (string) ($entry['id'] ?? Str::lower(Str::random(10))),
+                    'pincode' => $pincode,
+                    'city' => $city,
+                    'address' => $address,
+                    'saved_at' => $entry['saved_at'] ?? null,
+                ];
+            })
+            ->filter()
+            ->sortByDesc(fn (array $entry) => $entry['saved_at'] ?? '')
+            ->values()
+            ->all();
+    }
+
+    public function findSavedAddress(Customer $customer, string $addressId): ?array
+    {
+        return collect($this->customerAddressBook($customer))
+            ->first(fn (array $entry) => $entry['id'] === $addressId);
+    }
+
+    public function saveDeliveryAddress(Customer $customer, string $pincode, string $city, string $address): Customer
+    {
+        $pincode = trim($pincode);
+        $city = trim($city);
+        $address = trim($address);
+
         $metadata = $customer->metadata ?? [];
+        $savedAt = now()->toIso8601String();
+        $existing = collect($this->customerAddressBook($customer));
+
+        $matched = $existing->first(function (array $entry) use ($pincode, $city, $address) {
+            return $entry['pincode'] === $pincode
+                && Str::lower($entry['city']) === Str::lower($city)
+                && Str::lower($entry['address']) === Str::lower($address);
+        });
+
+        $current = [
+            'id' => $matched['id'] ?? Str::lower(Str::random(10)),
+            'pincode' => $pincode,
+            'city' => $city,
+            'address' => $address,
+            'saved_at' => $savedAt,
+        ];
+
+        $addressBook = $existing
+            ->reject(fn (array $entry) => $entry['id'] === $current['id'])
+            ->prepend($current)
+            ->take(9)
+            ->values()
+            ->all();
+
         $metadata['delivery'] = [
-            'pincode' => trim($pincode),
-            'address' => trim($address),
-            'saved_at' => now()->toIso8601String(),
+            'id' => $current['id'],
+            'pincode' => $pincode,
+            'city' => $city,
+            'address' => $address,
+            'saved_at' => $savedAt,
+            'address_book' => $addressBook,
         ];
 
         $customer->forceFill([
@@ -165,6 +230,68 @@ class StoreEngineService
         ])->save();
 
         return $customer->fresh();
+    }
+
+    public function useSavedAddress(Customer $customer, string $addressId): ?Customer
+    {
+        $address = $this->findSavedAddress($customer, $addressId);
+
+        if (! $address) {
+            return null;
+        }
+
+        return $this->saveDeliveryAddress(
+            $customer,
+            $address['pincode'],
+            $address['city'],
+            $address['address']
+        );
+    }
+
+    public function deliveryZones(Store $store): array
+    {
+        return collect(data_get($store->settings, 'delivery_zones', []))
+            ->map(function (array $zone) {
+                $pincode = trim((string) ($zone['pincode'] ?? ''));
+                $city = trim((string) ($zone['city'] ?? ''));
+
+                if ($pincode === '' || $city === '') {
+                    return null;
+                }
+
+                return [
+                    'pincode' => $pincode,
+                    'city' => $city,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    public function isDeliverable(Store $store, string $pincode, string $city): bool
+    {
+        $zones = $this->deliveryZones($store);
+
+        if ($zones === []) {
+            return true;
+        }
+
+        return collect($zones)->contains(function (array $zone) use ($pincode, $city) {
+            return $zone['pincode'] === trim($pincode)
+                && Str::lower($zone['city']) === Str::lower(trim($city));
+        });
+    }
+
+    public function undeliverableMessage(Store $store, string $pincode, string $city): string
+    {
+        $configured = trim((string) data_get($store->settings, 'undeliverable_message', ''));
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return "We do not currently deliver to {$city} {$pincode}.\nPlease choose another address or contact the store team.";
     }
 
     public function featuredProducts(Store $store, int $limit = 4): Collection
@@ -675,8 +802,29 @@ class StoreEngineService
             return null;
         }
 
+        return $this->syncOrderDelivery($order, $customer);
+    }
+
+    public function syncOrderDeliveryById(Store $store, Customer $customer, int $orderId): ?Order
+    {
+        $order = Order::query()
+            ->where('id', $orderId)
+            ->where('store_id', $store->id)
+            ->where('customer_id', $customer->id)
+            ->first();
+
+        if (! $order) {
+            return null;
+        }
+
+        return $this->syncOrderDelivery($order, $customer);
+    }
+
+    protected function syncOrderDelivery(Order $order, Customer $customer): Order
+    {
         $metadata = $order->metadata ?? [];
         $metadata['delivery'] = $this->deliveryDetails($customer);
+        data_set($metadata, 'admin_follow_up.address_received_at', now()->toIso8601String());
 
         $order->forceFill([
             'status' => 'pending_payment',
@@ -714,6 +862,7 @@ class StoreEngineService
             if (data_get($delivery, 'pincode') || data_get($delivery, 'address')) {
                 $lines[] = '';
                 $lines[] = 'Deliver to pincode: '.(data_get($delivery, 'pincode') ?: 'Not saved');
+                $lines[] = 'City: '.(data_get($delivery, 'city') ?: 'Not saved');
                 $lines[] = 'Address: '.(data_get($delivery, 'address') ?: 'Not saved');
             }
 

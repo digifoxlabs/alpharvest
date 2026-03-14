@@ -25,11 +25,12 @@ class TenantOrderActionService
             'last_message_at' => now(),
             'context' => array_merge($conversation->context ?? [], [
                 'awaiting_address' => true,
+                'awaiting_order_id' => $order->id,
                 'catalog_sync_pending' => false,
             ]),
         ])->save();
 
-        $body = "Please reply with your delivery address for order {$order->order_number}.\nSend your 6-digit pincode on line 1 and the full address below it.";
+        $body = "Please reply with your delivery address for order {$order->order_number}.\nSend your 6-digit pincode on line 1, city on line 2, and the full address below it.";
 
         $dispatch = $this->cloudApi->sendTextMessage($store, $customer, $body);
 

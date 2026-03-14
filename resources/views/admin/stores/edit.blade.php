@@ -127,6 +127,17 @@
                 <textarea name="whatsapp_contact_text">{{ old('whatsapp_contact_text', $store->whatsapp_contact_text) }}</textarea>
             </label>
 
+            <label>
+                Deliverable areas
+                <textarea name="delivery_zones_text" placeholder="700001 | Kolkata&#10;700002 | Howrah">{{ old('delivery_zones_text', $deliveryZonesText) }}</textarea>
+                <span class="muted">One area per line in `pincode | city` format.</span>
+            </label>
+
+            <label>
+                Outside-delivery message
+                <textarea name="undeliverable_message">{{ old('undeliverable_message', data_get($store->settings, 'undeliverable_message')) }}</textarea>
+            </label>
+
             @if ($store->whatsapp_store_image_url)
                 <div>
                     <p class="muted">Current store image</p>
@@ -178,6 +189,10 @@
                 <div class="table-row">
                     <strong>Products with local Meta retailer IDs</strong>
                     <span class="muted">{{ $catalogReadiness['catalog_products'] }} of {{ $catalogReadiness['active_products'] }}</span>
+                </div>
+                <div class="table-row">
+                    <strong>Deliverable areas</strong>
+                    <span class="muted">{{ count(data_get($store->settings, 'delivery_zones', [])) }}</span>
                 </div>
             </div>
         </article>

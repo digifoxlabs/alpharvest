@@ -39,6 +39,7 @@ class AdminStoreController extends Controller
     {
         $validated = $this->validateStore($request);
         $validated = $this->syncStoreImage($request, $validated);
+        $validated = $this->syncStoreSettings($validated);
 
         Store::create($validated);
 
@@ -52,6 +53,7 @@ class AdminStoreController extends Controller
         return view('admin.stores.edit', [
             'store' => $store,
             'catalogReadiness' => $this->storeEngine->whatsappCatalogReadiness($store),
+            'deliveryZonesText' => $this->deliveryZonesText($store),
             'tenants' => Tenant::query()->orderBy('name')->get(),
         ]);
     }
@@ -60,6 +62,7 @@ class AdminStoreController extends Controller
     {
         $validated = $this->validateStore($request, $store);
         $validated = $this->syncStoreImage($request, $validated, $store);
+        $validated = $this->syncStoreSettings($validated, $store);
 
         $store->update($validated);
 
@@ -100,6 +103,8 @@ class AdminStoreController extends Controller
             'whatsapp_welcome_text' => ['nullable', 'string', 'max:1024'],
             'whatsapp_store_intro' => ['nullable', 'string', 'max:2048'],
             'whatsapp_contact_text' => ['nullable', 'string', 'max:1024'],
+            'delivery_zones_text' => ['nullable', 'string'],
+            'undeliverable_message' => ['nullable', 'string', 'max:1024'],
             'whatsapp_store_image' => ['nullable', 'image', 'max:4096'],
             'remove_whatsapp_store_image' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
@@ -110,6 +115,53 @@ class AdminStoreController extends Controller
         $validated['remove_whatsapp_store_image'] = $request->boolean('remove_whatsapp_store_image');
 
         return $validated;
+    }
+
+    protected function syncStoreSettings(array $validated, ?Store $store = null): array
+    {
+        $settings = $store?->settings ?? [];
+
+        $settings['delivery_zones'] = collect(preg_split('/\r\n|\r|\n/', (string) ($validated['delivery_zones_text'] ?? '')) ?: [])
+            ->map(function (string $line) {
+                $line = trim($line);
+
+                if ($line === '') {
+                    return null;
+                }
+
+                $parts = preg_split('/\s*[|,]\s*/', $line, 2) ?: [];
+                $pincode = trim((string) ($parts[0] ?? ''));
+                $city = trim((string) ($parts[1] ?? ''));
+
+                if ($pincode === '' || $city === '') {
+                    return null;
+                }
+
+                return [
+                    'pincode' => $pincode,
+                    'city' => $city,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        $message = trim((string) ($validated['undeliverable_message'] ?? ''));
+        $settings['undeliverable_message'] = $message !== '' ? $message : null;
+
+        $validated['settings'] = $settings;
+
+        unset($validated['delivery_zones_text'], $validated['undeliverable_message']);
+
+        return $validated;
+    }
+
+    protected function deliveryZonesText(Store $store): string
+    {
+        return collect(data_get($store->settings, 'delivery_zones', []))
+            ->map(fn (array $zone) => trim(($zone['pincode'] ?? '').' | '.($zone['city'] ?? '')))
+            ->filter()
+            ->implode("\n");
     }
 
     protected function syncStoreImage(Request $request, array $validated, ?Store $store = null): array

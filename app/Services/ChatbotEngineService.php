@@ -32,6 +32,10 @@ class ChatbotEngineService
             return $this->captureAddress($store, $customer, $conversation, $incomingText);
         }
 
+        if ($addressId = $this->savedAddressCommand($conversation, $command, $incomingCommand)) {
+            return $this->handleSavedAddressSelection($store, $customer, $conversation, $addressId);
+        }
+
         if ($this->isGreeting($command, $text)) {
             return [$this->mainMenuMessage($store)];
         }
@@ -58,7 +62,7 @@ class ChatbotEngineService
             ]];
         }
 
-        if ($command === 'save_address') {
+        if (in_array($command, ['save_address', 'new_address'], true)) {
             return [$this->promptForAddress($store, $conversation)];
         }
 
@@ -66,13 +70,13 @@ class ChatbotEngineService
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->latestOrder($store, $customer);
 
-            return [[
+            $responses = [[
                 'kind' => 'buttons',
                 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
                     $order ? 'Your order has been placed successfully.' : 'Your order has been placed.',
                     $order ? 'Total: '.MoneyFormatter::format($order->total, $order->currency) : null,
-                    'Our store team will message you for address and payment.',
+                    'Please confirm the delivery address for this order.',
                 ]))),
                 'buttons' => [
                     ['id' => 'orders', 'title' => 'Orders'],
@@ -81,6 +85,27 @@ class ChatbotEngineService
                 ],
                 'footer' => 'Order received in WhatsApp.',
             ]];
+
+            if (! $order) {
+                return $responses;
+            }
+
+            $addressBook = $this->storeEngine->customerAddressBook($customer);
+
+            if ($addressBook === []) {
+                $responses[] = $this->promptForAddress(
+                    $store,
+                    $conversation,
+                    "Please share your delivery address for order {$order->order_number}.",
+                    $order->id
+                );
+
+                return $responses;
+            }
+
+            $responses[] = $this->savedAddressSelectionMessage($store, $conversation, $order, $addressBook);
+
+            return $responses;
         }
 
         if ($command === 'catalog_sync_failed') {
@@ -413,11 +438,18 @@ class ChatbotEngineService
         ]];
     }
 
-    protected function promptForAddress(Store $store, Conversation $conversation, ?string $prefix = null): array
+    protected function promptForAddress(Store $store, Conversation $conversation, ?string $prefix = null, ?int $orderId = null): array
     {
-        $this->setConversationContext($conversation, [
+        $context = [
             'awaiting_address' => true,
-        ]);
+            'address_choice_map' => null,
+        ];
+
+        if ($orderId) {
+            $context['awaiting_order_id'] = $orderId;
+        }
+
+        $this->setConversationContext($conversation, $context);
 
         return [
             'kind' => 'buttons',
@@ -425,14 +457,14 @@ class ChatbotEngineService
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
                 'Send your delivery details in this format:',
-                "700001\n221B Market Road\nKolkata, West Bengal",
+                "700001\nKolkata\n221B Market Road\nNear Central Metro",
             ]))),
             'buttons' => [
                 ['id' => 'view_cart', 'title' => 'View Cart'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => 'Pincode on line 1, address below.',
+            'footer' => 'Pincode line 1, city line 2.',
         ];
     }
 
@@ -441,26 +473,41 @@ class ChatbotEngineService
         $lines = preg_split('/\r\n|\r|\n/', trim($incomingText)) ?: [];
         $lines = array_values(array_filter(array_map('trim', $lines)));
         $pincode = $lines[0] ?? null;
-        $address = trim(implode("\n", array_slice($lines, 1)));
+        $city = $lines[1] ?? null;
+        $address = trim(implode("\n", array_slice($lines, 2)));
 
-        if (! $pincode || ! preg_match('/^\d{6}$/', $pincode) || $address === '') {
+        if (! $pincode || ! preg_match('/^\d{6}$/', $pincode) || ! $city || $address === '') {
             return [[
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => "That address format was not valid.\nSend a 6-digit pincode on the first line, then the full delivery address below it.",
+                'body' => "That address format was not valid.\nSend a 6-digit pincode on the first line, city on the second line, then the full delivery address below it.",
                 'buttons' => [
-                    ['id' => 'save_address', 'title' => 'Try Again'],
+                    ['id' => 'new_address', 'title' => 'Try Again'],
                     ['id' => 'view_cart', 'title' => 'View Cart'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
-                'footer' => 'Example: 700001 + address lines',
+                'footer' => 'Example: 700001, Kolkata, address',
             ]];
         }
 
-        $customer = $this->storeEngine->saveDeliveryAddress($customer, $pincode, $address);
-        $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        if (! $this->storeEngine->isDeliverable($store, $pincode, $city)) {
+            return [$this->undeliverableAreaMessage($store, $pincode, $city)];
+        }
+
+        $customer = $this->storeEngine->saveDeliveryAddress($customer, $pincode, $city, $address);
+        $requestedOrderId = (int) data_get($conversation->context, 'awaiting_order_id', 0);
+
+        if ($requestedOrderId > 0) {
+            $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
+                ?? $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        } else {
+            $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        }
+
         $this->setConversationContext($conversation, [
             'awaiting_address' => false,
+            'awaiting_order_id' => null,
+            'address_choice_map' => null,
         ]);
 
         return [[
@@ -486,6 +533,21 @@ class ChatbotEngineService
         return (bool) data_get($conversation->context, 'catalog_sync_pending', false);
     }
 
+    protected function savedAddressCommand(Conversation $conversation, string $command, ?string $incomingCommand): ?string
+    {
+        if (Str::startsWith($command, 'select_address:')) {
+            return (string) Str::after($command, 'select_address:');
+        }
+
+        $choiceMap = data_get($conversation->context, 'address_choice_map', []);
+
+        if ($incomingCommand === null && preg_match('/^\d+$/', $command) && isset($choiceMap[$command])) {
+            return (string) $choiceMap[$command];
+        }
+
+        return null;
+    }
+
     protected function setConversationContext(Conversation $conversation, array $context): void
     {
         $current = $conversation->context ?? [];
@@ -507,6 +569,112 @@ class ChatbotEngineService
                 ['id' => 'orders', 'title' => 'Orders'],
             ],
             'footer' => 'Waiting for catalog cart sync.',
+        ];
+    }
+
+    protected function savedAddressSelectionMessage(Store $store, Conversation $conversation, Order $order, array $addressBook): array
+    {
+        $rows = [];
+        $choiceMap = [];
+
+        foreach (collect($addressBook)->take(8)->values() as $index => $address) {
+            $number = (string) ($index + 1);
+            $choiceMap[$number] = $address['id'];
+            $rows[] = [
+                'id' => 'select_address:'.$address['id'],
+                'title' => Str::limit($number.'. '.$address['pincode'].' '.$address['city'], 24, ''),
+                'description' => Str::limit($address['address'], 72, ''),
+            ];
+        }
+
+        $rows[] = [
+            'id' => 'new_address',
+            'title' => 'New Address',
+            'description' => 'Use a different delivery address',
+        ];
+
+        $this->setConversationContext($conversation, [
+            'awaiting_address' => false,
+            'awaiting_order_id' => $order->id,
+            'address_choice_map' => $choiceMap,
+        ]);
+
+        return [
+            'kind' => 'list',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => "Choose a saved delivery address for order {$order->order_number}, or select New Address.",
+            'button_text' => 'Choose Address',
+            'sections' => [[
+                'title' => 'Saved addresses',
+                'rows' => $rows,
+            ]],
+            'footer' => 'Reply with 1, 2, 3 or tap an address.',
+        ];
+    }
+
+    protected function handleSavedAddressSelection(Store $store, Customer $customer, Conversation $conversation, string $addressId): array
+    {
+        $savedAddress = $this->storeEngine->findSavedAddress($customer, $addressId);
+
+        if (! $savedAddress) {
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "That saved address is no longer available.\nPlease choose another address or add a new one.",
+                'buttons' => [
+                    ['id' => 'new_address', 'title' => 'New Address'],
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Address selection expired.',
+            ]];
+        }
+
+        if (! $this->storeEngine->isDeliverable($store, $savedAddress['pincode'], $savedAddress['city'])) {
+            return [$this->undeliverableAreaMessage($store, $savedAddress['pincode'], $savedAddress['city'])];
+        }
+
+        $customer = $this->storeEngine->useSavedAddress($customer, $addressId) ?? $customer;
+        $requestedOrderId = (int) data_get($conversation->context, 'awaiting_order_id', 0);
+
+        if ($requestedOrderId > 0) {
+            $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
+                ?? $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        } else {
+            $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+        }
+
+        $this->setConversationContext($conversation, [
+            'awaiting_address' => false,
+            'awaiting_order_id' => null,
+            'address_choice_map' => null,
+        ]);
+
+        return [[
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => "Address confirmed.\n".$this->storeEngine->deliverySummary($customer)."\nOur store team will send your payment link shortly.",
+            'buttons' => [
+                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Saved address linked to this order.',
+        ]];
+    }
+
+    protected function undeliverableAreaMessage(Store $store, string $pincode, string $city): array
+    {
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => $this->storeEngine->undeliverableMessage($store, $pincode, $city),
+            'buttons' => [
+                ['id' => 'new_address', 'title' => 'New Address'],
+                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Outside delivery area.',
         ];
     }
 }

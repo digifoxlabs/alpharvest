@@ -37,6 +37,7 @@ class TenantDashboardTest extends TestCase
             'metadata' => [
                 'delivery' => [
                     'pincode' => '700001',
+                    'city' => 'Kolkata',
                     'address' => "221B Market Road\nKolkata",
                 ],
             ],
@@ -54,6 +55,7 @@ class TenantDashboardTest extends TestCase
             'metadata' => [
                 'delivery' => [
                     'pincode' => '700001',
+                    'city' => 'Kolkata',
                     'address' => "221B Market Road\nKolkata",
                 ],
             ],
@@ -163,13 +165,14 @@ class TenantDashboardTest extends TestCase
         $order->refresh();
 
         $this->assertTrue((bool) data_get($conversation->context, 'awaiting_address'));
+        $this->assertSame($order->id, data_get($conversation->context, 'awaiting_order_id'));
         $this->assertSame('awaiting_address', $order->status);
         $this->assertNotNull(data_get($order->metadata, 'admin_follow_up.address_requested_at'));
 
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'direction' => 'outbound',
-            'body' => "Please reply with your delivery address for order {$order->order_number}.\nSend your 6-digit pincode on line 1 and the full address below it.",
+            'body' => "Please reply with your delivery address for order {$order->order_number}.\nSend your 6-digit pincode on line 1, city on line 2, and the full address below it.",
         ]);
 
         $this->post(route('dashboard.orders.send-payment-link', [$tenant, $order]))
@@ -191,5 +194,115 @@ class TenantDashboardTest extends TestCase
 
         Http::assertSentCount(2);
         Http::assertSent(fn (Request $request) => str_contains(data_get($request->data(), 'text.body', ''), $order->order_number));
+    }
+
+    public function test_customer_address_reply_after_dashboard_request_is_saved_on_that_order(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create([
+            'slug' => 'northwind-commerce',
+            'name' => 'Northwind Commerce',
+        ]);
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Northwind Wellness',
+            'whatsapp_phone_number_id' => '1234567890',
+            'whatsapp_brand_name' => 'Northwind Wellness',
+        ]);
+
+        $customer = Customer::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Riya Sharma',
+            'phone' => '15551234567',
+        ]);
+
+        $conversation = Conversation::create([
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'status' => 'open',
+            'source' => 'whatsapp',
+            'last_message_at' => now(),
+        ]);
+
+        $order = Order::create([
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'order_number' => 'NORTHWIND-00001',
+            'status' => 'awaiting_address',
+            'payment_status' => 'unpaid',
+            'currency' => 'USD',
+            'subtotal' => 51.00,
+            'total' => 51.00,
+            'placed_at' => now(),
+        ]);
+
+        $this->post(route('dashboard.orders.request-address', [$tenant, $order]))
+            ->assertRedirect(route('dashboard.show', $tenant));
+
+        $payload = [
+            'entry' => [[
+                'id' => 'entry-address-reply',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.address-reply',
+                            'from' => '15551234567',
+                            'type' => 'text',
+                            'text' => [
+                                'body' => "700001\nKolkata\n221B Market Road\nNear Central Metro",
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $payload)
+            ->assertOk()
+            ->assertJson(['status' => 'accepted']);
+
+        $conversation->refresh();
+        $order->refresh();
+
+        $this->assertFalse((bool) data_get($conversation->context, 'awaiting_address'));
+        $this->assertNull(data_get($conversation->context, 'awaiting_order_id'));
+        $this->assertSame('pending_payment', $order->status);
+        $this->assertSame('700001', data_get($order->metadata, 'delivery.pincode'));
+        $this->assertSame('Kolkata', data_get($order->metadata, 'delivery.city'));
+        $this->assertSame("221B Market Road\nNear Central Metro", data_get($order->metadata, 'delivery.address'));
+        $this->assertNotNull(data_get($order->metadata, 'admin_follow_up.address_received_at'));
+
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'outbound',
+            'body' => "Northwind Wellness\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOur store team will send your payment link shortly.\nAddress saved for this order.",
+        ]);
     }
 }

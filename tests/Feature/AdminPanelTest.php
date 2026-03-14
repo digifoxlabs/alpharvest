@@ -64,6 +64,8 @@ class AdminPanelTest extends TestCase
             'whatsapp_welcome_text' => 'Hi! Choose Visit Store, Orders, or Contact.',
             'whatsapp_store_intro' => 'Browse our store in WhatsApp.',
             'whatsapp_contact_text' => 'Support responds within one business day.',
+            'delivery_zones_text' => "700001 | Kolkata\n700002 | Howrah",
+            'undeliverable_message' => 'Sorry, this location is outside our delivery area.',
             'whatsapp_store_image' => UploadedFile::fake()->image('store-front.png'),
             'is_active' => '1',
         ])->assertRedirect(route('admin.stores.index'));
@@ -132,6 +134,10 @@ class AdminPanelTest extends TestCase
             'whatsapp_brand_name' => 'Northwind Store',
             'meta_catalog_id' => '5544332211',
         ]);
+
+        $store->refresh();
+        $this->assertSame('Sorry, this location is outside our delivery area.', data_get($store->settings, 'undeliverable_message'));
+        $this->assertCount(2, data_get($store->settings, 'delivery_zones', []));
 
         $this->assertDatabaseHas('product_categories', [
             'id' => $category->id,
