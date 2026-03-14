@@ -276,41 +276,19 @@ class ChatbotEngineService
     {
         $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
 
-        if ($catalogReadiness['ready'] && $catalogReadiness['checks']['mapped_products']) {
-            $this->setConversationContext($conversation, [
-                'catalog_sync_pending' => true,
-            ]);
-
-            return [[
-                'kind' => 'product_list',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => $this->storeEngine->storeIntroText($store),
-                'sections' => $this->storeEngine->whatsappCatalogSections($store),
-                'footer' => 'Browse products and add them from WhatsApp.',
-            ]];
-        }
-
         if ($catalogReadiness['ready']) {
             $this->setConversationContext($conversation, [
                 'catalog_sync_pending' => true,
             ]);
 
-            // return [[
-            //     'kind' => 'catalog_message',
-            //     'body' => $this->storeEngine->storeIntroText($store),
-            //     'footer' => 'Open the full store inside WhatsApp.',
-            // ]];
-
-                       return [[
-                'kind' => 'product_list',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            return [[
+                'kind' => 'catalog_message',
                 'body' => $this->storeEngine->storeIntroText($store),
-                'sections' => $this->storeEngine->whatsappCatalogSections($store),
-                'footer' => 'Browse products and add them from WhatsApp.',
+                'footer' => 'Open the full store inside WhatsApp.',
             ]];
 
 
-
+            
         }
 
         $this->setConversationContext($conversation, [
@@ -322,7 +300,7 @@ class ChatbotEngineService
 
     public function fallbackStorefrontMessages(Store $store): array
     {
-        $messages = [];
+        // $messages = [];
 
         // if ($store->whatsapp_store_image_url) {
         //     $messages[] = [

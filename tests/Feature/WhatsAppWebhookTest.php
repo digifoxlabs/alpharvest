@@ -176,7 +176,7 @@ class WhatsAppWebhookTest extends TestCase
             && str_contains(data_get($request->data(), 'interactive.body.text', ''), 'Payment: Pending'));
     }
 
-    public function test_visit_store_uses_multi_product_catalog_message_when_catalog_mapping_is_configured(): void
+    public function test_visit_store_prefers_catalog_message_when_catalog_mapping_is_configured(): void
     {
         $counter = 0;
 
@@ -258,23 +258,12 @@ class WhatsAppWebhookTest extends TestCase
 
         $request = collect(Http::recorded())
             ->map(fn (array $pair) => $pair[0])
-            ->first(fn (Request $request) => ($request->data()['interactive']['type'] ?? null) === 'product_list');
+            ->first(fn (Request $request) => ($request->data()['interactive']['type'] ?? null) === 'catalog_message');
 
         $this->assertNotNull($request);
-
-        $sections = $request->data()['interactive']['action']['sections'] ?? [];
-        $retailerIds = collect($sections)
-            ->flatMap(fn (array $section) => $section['product_items'] ?? [])
-            ->pluck('product_retailer_id')
-            ->all();
-        $sectionTitles = collect($sections)->pluck('title')->all();
-
-        $this->assertSame('5566778899', $request->data()['interactive']['action']['catalog_id'] ?? null);
         $this->assertStringContainsString('Browse our featured wellness products below.', $request->data()['interactive']['body']['text'] ?? '');
-        $this->assertContains('catalog-COF-250', $retailerIds);
-        $this->assertContains('Wellness', $sectionTitles);
-        $this->assertContains('See All', $sectionTitles);
         $this->assertSame('individual', $request->data()['recipient_type'] ?? null);
+        $this->assertSame('catalog_message', $request->data()['interactive']['action']['name'] ?? null);
     }
 
     public function test_visit_store_catalog_message_trims_oversized_intro_and_footer(): void
