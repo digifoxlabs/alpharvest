@@ -26,7 +26,16 @@
                         | {{ $message->type }}
                         | {{ $message->conversation?->customer?->name ?: $message->conversation?->customer?->phone ?: 'Unknown customer' }}
                     </p>
-                    <p class="muted">WhatsApp ID: {{ $message->whatsapp_message_id ?: 'Not available' }}</p>
+                    <p class="muted">
+                        WhatsApp ID:
+                        @if ($message->whatsapp_message_id)
+                            {{ $message->whatsapp_message_id }}
+                        @elseif ($message->direction === 'outbound' && $message->status_label === 'Failed')
+                            Not assigned because Meta rejected the message
+                        @else
+                            Not available
+                        @endif
+                    </p>
                     <p>{{ $message->body ?: 'No message body stored.' }}</p>
                     <p class="muted">
                         Sent: {{ $message->sent_at?->format('Y-m-d H:i:s') ?: 'Not sent' }}

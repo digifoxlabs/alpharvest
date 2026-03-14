@@ -92,7 +92,7 @@ class WhatsAppWebhookTest extends TestCase
         ]);
     }
 
-    public function test_visit_store_and_add_to_cart_flow_uses_native_catalog_storefront_when_configured(): void
+    public function test_visit_store_uses_native_catalog_message_when_configured(): void
     {
         $counter = 0;
 
@@ -172,17 +172,56 @@ class WhatsAppWebhookTest extends TestCase
         $this->postJson('/api/whatsapp/webhook', $visitStorePayload)->assertOk();
 
         Http::assertSent(function (Request $request) {
-            $sections = $request->data()['interactive']['action']['sections'] ?? [];
-            $retailerIds = collect($sections)
-                ->flatMap(fn ($section) => $section['product_items'] ?? [])
-                ->pluck('product_retailer_id')
-                ->all();
-
-            return ($request->data()['interactive']['type'] ?? null) === 'product_list'
-                && ($request->data()['interactive']['action']['catalog_id'] ?? null) === '5566778899'
+            return ($request->data()['interactive']['type'] ?? null) === 'catalog_message'
+                && ($request->data()['interactive']['action']['name'] ?? null) === 'catalog_message'
                 && str_contains($request->data()['interactive']['body']['text'] ?? '', 'Browse our featured wellness products below.')
-                && in_array('catalog-COF-250', $retailerIds, true);
+                && ($request->data()['recipient_type'] ?? null) === 'individual';
         });
+    }
+
+    public function test_add_to_cart_button_flow_updates_cart(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'slug' => 'wellness',
+        ]);
+
+        $product = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'meta_retailer_id' => 'catalog-COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
 
         $addToCartPayload = [
             'entry' => [[

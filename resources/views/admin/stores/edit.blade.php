@@ -20,8 +20,11 @@
                     <span class="badge {{ $catalogReadiness['checks']['phone_number_id'] ? 'success' : 'warning' }}">Phone number ID</span>
                     <span class="badge {{ $catalogReadiness['checks']['access_token'] ? 'success' : 'warning' }}">Access token</span>
                     <span class="badge {{ $catalogReadiness['checks']['meta_catalog_id'] ? 'success' : 'warning' }}">Meta catalog ID</span>
+                    <span class="badge {{ $catalogReadiness['checks']['active_products'] ? 'success' : 'warning' }}">
+                        Active products {{ $catalogReadiness['active_products'] }}
+                    </span>
                     <span class="badge {{ $catalogReadiness['checks']['mapped_products'] ? 'success' : 'warning' }}">
-                        Catalog products {{ $catalogReadiness['catalog_products'] }}/{{ $catalogReadiness['active_products'] }}
+                        Retailer IDs {{ $catalogReadiness['catalog_products'] }}/{{ $catalogReadiness['active_products'] }}
                     </span>
                 </div>
                 @if ($catalogReadiness['issues'] !== [])
@@ -169,12 +172,12 @@
                     <span class="muted">{{ $catalogReadiness['checks']['meta_catalog_id'] ? ($store->meta_catalog_id ?: 'Configured') : 'Missing' }}</span>
                 </div>
                 <div class="table-row">
-                    <strong>Active products with Meta retailer IDs</strong>
-                    <span class="muted">{{ $catalogReadiness['catalog_products'] }} of {{ $catalogReadiness['active_products'] }}</span>
+                    <strong>Active products</strong>
+                    <span class="muted">{{ $catalogReadiness['active_products'] }}</span>
                 </div>
                 <div class="table-row">
-                    <strong>Products ready for native catalog</strong>
-                    <span class="muted">{{ $catalogReadiness['checks']['mapped_products'] ? 'Yes' : 'No' }}</span>
+                    <strong>Products with local Meta retailer IDs</strong>
+                    <span class="muted">{{ $catalogReadiness['catalog_products'] }} of {{ $catalogReadiness['active_products'] }}</span>
                 </div>
             </div>
         </article>

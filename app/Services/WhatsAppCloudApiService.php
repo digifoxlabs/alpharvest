@@ -170,6 +170,30 @@ class WhatsAppCloudApiService
         ]);
     }
 
+    public function sendCatalogMessage(
+        Store $store,
+        Customer $customer,
+        string $body,
+        ?string $footer = null
+    ): array {
+        $interactive = [
+            'type' => 'catalog_message',
+            'body' => ['text' => $body],
+            'action' => [
+                'name' => 'catalog_message',
+            ],
+        ];
+
+        if ($footer) {
+            $interactive['footer'] = ['text' => $footer];
+        }
+
+        return $this->dispatch($store, $customer, [
+            'type' => 'interactive',
+            'interactive' => $interactive,
+        ]);
+    }
+
     public function sendStructuredMessage(Store $store, Customer $customer, array $message): array
     {
         return match ($message['kind'] ?? 'text') {
@@ -201,6 +225,12 @@ class WhatsAppCloudApiService
                 $message['footer'] ?? null,
                 $message['header_text'] ?? null
             ),
+            'catalog_message' => $this->sendCatalogMessage(
+                $store,
+                $customer,
+                $message['body'],
+                $message['footer'] ?? null
+            ),
             'product_list' => $this->sendMultiProductMessage(
                 $store,
                 $customer,
@@ -228,6 +258,7 @@ class WhatsAppCloudApiService
 
         $requestBody = array_merge([
             'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
             'to' => $customer->phone,
         ], $payload);
 
@@ -236,12 +267,16 @@ class WhatsAppCloudApiService
             ->baseUrl(rtrim(config('services.whatsapp.base_url', 'https://graph.facebook.com/v20.0'), '/'))
             ->post('/'.$phoneNumberId.'/messages', $requestBody);
 
+        $responseJson = $response->json();
+
         return [
             'dispatched' => $response->successful(),
             'status' => $response->status(),
             'request' => $requestBody,
-            'response' => $response->json(),
-            'message_id' => Arr::get($response->json(), 'messages.0.id'),
+            'response' => $responseJson,
+            'response_body' => $response->body(),
+            'error_message' => Arr::get($responseJson, 'error.message') ?: (! $response->successful() ? $response->body() : null),
+            'message_id' => Arr::get($responseJson, 'messages.0.id'),
         ];
     }
 }

@@ -211,7 +211,7 @@ class AdminPanelTest extends TestCase
         $this->get(route('admin.stores.index'))
             ->assertOk()
             ->assertSee('Native catalog ready')
-            ->assertSee('Mapped products 1/1');
+            ->assertSee('Retailer IDs 1/1');
 
         $this->get(route('admin.messages.index'))
             ->assertOk()

@@ -150,6 +150,7 @@ class StoreEngineService
             'phone_number_id' => (bool) ($store->whatsapp_phone_number_id ?: config('services.whatsapp.phone_number_id')),
             'access_token' => (bool) ($store->getRawOriginal('meta_access_token') ?: config('services.whatsapp.token')),
             'meta_catalog_id' => (bool) $store->meta_catalog_id,
+            'active_products' => $activeProducts > 0,
             'mapped_products' => $catalogProducts > 0,
         ];
 
@@ -171,10 +172,10 @@ class StoreEngineService
             $issues[] = 'Meta catalog ID is missing.';
         }
 
-        if ($activeProducts === 0) {
+        if (! $checks['active_products']) {
             $issues[] = 'No active products are available.';
         } elseif (! $checks['mapped_products']) {
-            $issues[] = 'Active products need Meta retailer IDs before the native catalog can be sent.';
+            $issues[] = 'No Meta retailer IDs are assigned locally. Full catalog open can still work, but product-specific native shares may be limited until IDs are mapped.';
         }
 
         return [
@@ -182,7 +183,7 @@ class StoreEngineService
                 && $checks['phone_number_id']
                 && $checks['access_token']
                 && $checks['meta_catalog_id']
-                && $checks['mapped_products'],
+                && $checks['active_products'],
             'checks' => $checks,
             'active_products' => $activeProducts,
             'catalog_products' => $catalogProducts,

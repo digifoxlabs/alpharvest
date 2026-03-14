@@ -136,15 +136,14 @@ class WhatsAppWebhookService
         foreach ($responses as $response) {
             $dispatch = $this->cloudApi->sendStructuredMessage($store, $customer, $response);
 
-            Message::create([
-                'conversation_id' => $conversation->id,
-                'direction' => 'outbound',
-                'type' => $this->messageTypeForResponse($response),
-                'whatsapp_message_id' => $dispatch['message_id'] ?? null,
-                'body' => $this->bodyForResponse($response),
-                'payload' => $dispatch,
-                'sent_at' => now(),
-            ]);
+            $this->storeOutboundMessage($conversation, $response, $dispatch);
+
+            if (! ($dispatch['dispatched'] ?? false) && in_array($response['kind'] ?? null, ['catalog_message', 'product_list'], true)) {
+                foreach ($this->chatbot->fallbackStorefrontMessages($store) as $fallbackResponse) {
+                    $fallbackDispatch = $this->cloudApi->sendStructuredMessage($store, $customer, $fallbackResponse);
+                    $this->storeOutboundMessage($conversation, $fallbackResponse, $fallbackDispatch);
+                }
+            }
         }
     }
 
@@ -178,9 +177,22 @@ class WhatsAppWebhookService
     protected function messageTypeForResponse(array $response): string
     {
         return match ($response['kind'] ?? 'text') {
-            'buttons', 'image_buttons', 'list', 'product_list' => 'interactive',
+            'buttons', 'image_buttons', 'list', 'catalog_message', 'product_list' => 'interactive',
             default => 'text',
         };
+    }
+
+    protected function storeOutboundMessage(Conversation $conversation, array $response, array $dispatch): void
+    {
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'outbound',
+            'type' => $this->messageTypeForResponse($response),
+            'whatsapp_message_id' => $dispatch['message_id'] ?? null,
+            'body' => $this->bodyForResponse($response),
+            'payload' => $dispatch,
+            'sent_at' => $dispatch['dispatched'] ? now() : null,
+        ]);
     }
 
     protected function processStatusUpdate(array $status): void

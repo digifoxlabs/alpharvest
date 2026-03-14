@@ -135,8 +135,11 @@
                                 <span class="badge {{ $readiness['checks']['phone_number_id'] ? 'success' : 'warning' }}">Phone ID</span>
                                 <span class="badge {{ $readiness['checks']['access_token'] ? 'success' : 'warning' }}">Access token</span>
                                 <span class="badge {{ $readiness['checks']['meta_catalog_id'] ? 'success' : 'warning' }}">Catalog ID</span>
+                                <span class="badge {{ $readiness['checks']['active_products'] ? 'success' : 'warning' }}">
+                                    Active products {{ $readiness['active_products'] }}
+                                </span>
                                 <span class="badge {{ $readiness['checks']['mapped_products'] ? 'success' : 'warning' }}">
-                                    Mapped products {{ $readiness['catalog_products'] }}/{{ $readiness['active_products'] }}
+                                    Retailer IDs {{ $readiness['catalog_products'] }}/{{ $readiness['active_products'] }}
                                 </span>
                             </div>
                             @if ($readiness['issues'] !== [])

@@ -79,6 +79,8 @@ class Message extends Model
         return data_get($this->payload, 'status_update.errors.0.title')
             ?: data_get($this->payload, 'status_update.errors.0.message')
             ?: data_get($this->payload, 'response.error.message')
+            ?: data_get($this->payload, 'error_message')
+            ?: data_get($this->payload, 'response_body')
             ?: data_get($this->payload, 'reason');
     }
 }

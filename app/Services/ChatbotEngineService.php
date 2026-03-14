@@ -165,14 +165,17 @@ class ChatbotEngineService
     {
         if ($this->storeEngine->canSendWhatsAppCatalog($store)) {
             return [[
-                'kind' => 'product_list',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'kind' => 'catalog_message',
                 'body' => $this->storeEngine->storeIntroText($store),
-                'sections' => $this->storeEngine->whatsappCatalogSections($store),
-                'footer' => 'Browse the full store inside WhatsApp and add items natively to cart.',
+                'footer' => 'Open the full store inside WhatsApp.',
             ]];
         }
 
+        return $this->fallbackStorefrontMessages($store);
+    }
+
+    public function fallbackStorefrontMessages(Store $store): array
+    {
         $messages = [];
 
         if ($store->whatsapp_store_image_url) {
