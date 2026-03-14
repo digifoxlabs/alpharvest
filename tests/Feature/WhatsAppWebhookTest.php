@@ -179,6 +179,89 @@ class WhatsAppWebhookTest extends TestCase
         });
     }
 
+    public function test_visit_store_catalog_message_trims_oversized_intro_and_footer(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => str_repeat('AlphaHarvest ', 8),
+            'whatsapp_store_intro' => str_repeat('This is a very long storefront intro message. ', 40),
+            'meta_catalog_id' => '5566778899',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Catalog Ready Product',
+            'slug' => 'catalog-ready-product',
+            'sku' => 'CAT-001',
+        ]);
+
+        $visitStorePayload = [
+            'entry' => [[
+                'id' => 'entry-visit-store',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.visit-store',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'visit_store',
+                                    'title' => 'Visit Store',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $visitStorePayload)->assertOk();
+
+        $request = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->first(fn (Request $request) => str_contains($request->url(), '/messages'));
+
+        $this->assertNotNull($request);
+        $body = $request->data()['interactive']['body']['text'] ?? '';
+        $footer = $request->data()['interactive']['footer']['text'] ?? '';
+
+        $this->assertSame('catalog_message', $request->data()['interactive']['type'] ?? null);
+        $this->assertLessThanOrEqual(1024, strlen($body));
+        $this->assertLessThanOrEqual(60, strlen($footer));
+    }
+
     public function test_add_to_cart_button_flow_updates_cart(): void
     {
         $counter = 0;

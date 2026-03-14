@@ -6,9 +6,16 @@ use App\Models\Customer;
 use App\Models\Store;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class WhatsAppCloudApiService
 {
+    protected const INTERACTIVE_BODY_MAX = 1024;
+    protected const INTERACTIVE_FOOTER_MAX = 60;
+    protected const INTERACTIVE_HEADER_TEXT_MAX = 60;
+    protected const INTERACTIVE_BUTTON_TITLE_MAX = 20;
+    protected const LIST_BUTTON_TEXT_MAX = 20;
+
     public function sendTextMessage(Store $store, Customer $customer, string $text): array
     {
         return $this->dispatch($store, $customer, [
@@ -30,14 +37,14 @@ class WhatsAppCloudApiService
     ): array {
         $interactive = [
             'type' => 'button',
-            'body' => ['text' => $body],
+            'body' => ['text' => $this->fitInteractiveBody($body)],
             'action' => [
                 'buttons' => collect($buttons)->take(3)->map(function (array $button) {
                     return [
                         'type' => 'reply',
                         'reply' => [
                             'id' => $button['id'],
-                            'title' => $button['title'],
+                            'title' => $this->fitInteractiveButtonTitle($button['title']),
                         ],
                     ];
                 })->values()->all(),
@@ -45,13 +52,13 @@ class WhatsAppCloudApiService
         ];
 
         if ($footer) {
-            $interactive['footer'] = ['text' => $footer];
+            $interactive['footer'] = ['text' => $this->fitInteractiveFooter($footer)];
         }
 
         if ($headerText) {
             $interactive['header'] = [
                 'type' => 'text',
-                'text' => $headerText,
+                'text' => $this->fitInteractiveHeader($headerText),
             ];
         }
 
@@ -71,14 +78,14 @@ class WhatsAppCloudApiService
     ): array {
         $interactive = [
             'type' => 'button',
-            'body' => ['text' => $body],
+            'body' => ['text' => $this->fitInteractiveBody($body)],
             'action' => [
                 'buttons' => collect($buttons)->take(3)->map(function (array $button) {
                     return [
                         'type' => 'reply',
                         'reply' => [
                             'id' => $button['id'],
-                            'title' => $button['title'],
+                            'title' => $this->fitInteractiveButtonTitle($button['title']),
                         ],
                     ];
                 })->values()->all(),
@@ -92,7 +99,7 @@ class WhatsAppCloudApiService
         ];
 
         if ($footer) {
-            $interactive['footer'] = ['text' => $footer];
+            $interactive['footer'] = ['text' => $this->fitInteractiveFooter($footer)];
         }
 
         return $this->dispatch($store, $customer, [
@@ -112,21 +119,21 @@ class WhatsAppCloudApiService
     ): array {
         $interactive = [
             'type' => 'list',
-            'body' => ['text' => $body],
+            'body' => ['text' => $this->fitInteractiveBody($body)],
             'action' => [
-                'button' => $buttonText,
+                'button' => $this->fitListButtonText($buttonText),
                 'sections' => $sections,
             ],
         ];
 
         if ($footer) {
-            $interactive['footer'] = ['text' => $footer];
+            $interactive['footer'] = ['text' => $this->fitInteractiveFooter($footer)];
         }
 
         if ($headerText) {
             $interactive['header'] = [
                 'type' => 'text',
-                'text' => $headerText,
+                'text' => $this->fitInteractiveHeader($headerText),
             ];
         }
 
@@ -146,7 +153,7 @@ class WhatsAppCloudApiService
     ): array {
         $interactive = [
             'type' => 'product_list',
-            'body' => ['text' => $body],
+            'body' => ['text' => $this->fitInteractiveBody($body)],
             'action' => [
                 'catalog_id' => $store->meta_catalog_id,
                 'sections' => $sections,
@@ -154,13 +161,13 @@ class WhatsAppCloudApiService
         ];
 
         if ($footer) {
-            $interactive['footer'] = ['text' => $footer];
+            $interactive['footer'] = ['text' => $this->fitInteractiveFooter($footer)];
         }
 
         if ($headerText) {
             $interactive['header'] = [
                 'type' => 'text',
-                'text' => $headerText,
+                'text' => $this->fitInteractiveHeader($headerText),
             ];
         }
 
@@ -178,14 +185,14 @@ class WhatsAppCloudApiService
     ): array {
         $interactive = [
             'type' => 'catalog_message',
-            'body' => ['text' => $body],
+            'body' => ['text' => $this->fitInteractiveBody($body)],
             'action' => [
                 'name' => 'catalog_message',
             ],
         ];
 
         if ($footer) {
-            $interactive['footer'] = ['text' => $footer];
+            $interactive['footer'] = ['text' => $this->fitInteractiveFooter($footer)];
         }
 
         return $this->dispatch($store, $customer, [
@@ -278,5 +285,38 @@ class WhatsAppCloudApiService
             'error_message' => Arr::get($responseJson, 'error.message') ?: (! $response->successful() ? $response->body() : null),
             'message_id' => Arr::get($responseJson, 'messages.0.id'),
         ];
+    }
+
+    protected function fitInteractiveBody(string $value): string
+    {
+        return $this->fitText(trim($value), self::INTERACTIVE_BODY_MAX);
+    }
+
+    protected function fitInteractiveFooter(string $value): string
+    {
+        return $this->fitText(trim($value), self::INTERACTIVE_FOOTER_MAX);
+    }
+
+    protected function fitInteractiveHeader(string $value): string
+    {
+        return $this->fitText(trim($value), self::INTERACTIVE_HEADER_TEXT_MAX);
+    }
+
+    protected function fitInteractiveButtonTitle(string $value): string
+    {
+        return $this->fitText(trim($value), self::INTERACTIVE_BUTTON_TITLE_MAX);
+    }
+
+    protected function fitListButtonText(string $value): string
+    {
+        return $this->fitText(trim($value), self::LIST_BUTTON_TEXT_MAX);
+    }
+
+    protected function fitText(string $value, int $maxLength): string
+    {
+        $overflow = '...';
+        $sliceLength = max($maxLength - strlen($overflow), 1);
+
+        return Str::limit($value, $sliceLength, $overflow);
     }
 }
