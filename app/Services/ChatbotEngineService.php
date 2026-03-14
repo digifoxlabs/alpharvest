@@ -62,6 +62,27 @@ class ChatbotEngineService
             return [$this->promptForAddress($store, $conversation)];
         }
 
+        if ($command === 'catalog_order_received') {
+            $order = $this->storeEngine->latestOpenOrder($store, $customer)
+                ?? $this->storeEngine->latestOrder($store, $customer);
+
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
+                'body' => trim(implode("\n", array_filter([
+                    $order ? 'Your order has been placed successfully.' : 'Your order has been placed.',
+                    $order ? 'Total: '.MoneyFormatter::format($order->total, $order->currency) : null,
+                    'Our store team will message you for address and payment.',
+                ]))),
+                'buttons' => [
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'visit_store', 'title' => 'Visit Store'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Order received in WhatsApp.',
+            ]];
+        }
+
         if ($command === 'catalog_sync_failed') {
             return [[
                 'kind' => 'buttons',
@@ -96,10 +117,7 @@ class ChatbotEngineService
             }
 
             if (! $this->storeEngine->deliveryDetails($customer)['is_saved']) {
-                return [
-                    $this->promptForAddress($store, $conversation, 'Save delivery details before checkout.'),
-                    $this->deliveryHelperMessage($store, $customer),
-                ];
+                return [$this->promptForAddress($store, $conversation, 'Save delivery details before checkout.')];
             }
 
             $order = $this->storeEngine->checkout($store, $customer, $conversation);
@@ -235,7 +253,7 @@ class ChatbotEngineService
                 'body' => $this->storeEngine->storeIntroText($store),
                 'sections' => $this->storeEngine->whatsappCatalogSections($store),
                 'footer' => 'Browse products and add them from WhatsApp.',
-            ], $this->deliveryHelperMessage($store, $customer)];
+            ]];
         }
 
         if ($catalogReadiness['ready']) {
@@ -247,17 +265,14 @@ class ChatbotEngineService
                 'kind' => 'catalog_message',
                 'body' => $this->storeEngine->storeIntroText($store),
                 'footer' => 'Open the full store inside WhatsApp.',
-            ], $this->deliveryHelperMessage($store, $customer)];
+            ]];
         }
 
         $this->setConversationContext($conversation, [
             'catalog_sync_pending' => false,
         ]);
 
-        return array_merge(
-            $this->fallbackStorefrontMessages($store),
-            [$this->deliveryHelperMessage($store, $customer)]
-        );
+        return $this->fallbackStorefrontMessages($store);
     }
 
     public function fallbackStorefrontMessages(Store $store): array
@@ -362,14 +377,14 @@ class ChatbotEngineService
 
         if ($openOrder) {
             $buttons = [
-                ['id' => 'pay_now', 'title' => 'Pay Now'],
-                ['id' => 'view_cart', 'title' => 'View Cart'],
+                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ];
         } elseif ($cart->items->isNotEmpty()) {
             $buttons = [
-                ['id' => 'save_address', 'title' => 'Save Address'],
-                ['id' => 'checkout', 'title' => 'Checkout'],
+                ['id' => 'view_cart', 'title' => 'View Cart'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'clear_cart', 'title' => 'Clear Cart'],
             ];
         }
@@ -385,34 +400,17 @@ class ChatbotEngineService
 
     protected function checkoutMessages(Store $store, Order $order): array
     {
-        $payment = $this->paymentLinks->createOrReuse($order);
-
         return [[
             'kind' => 'buttons',
             'header_text' => $order->order_number,
-            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nPayment link: {$payment->payment_url}\nUse Pay Now for the secure payment step.",
+            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nOur store team will message you for address and payment.",
             'buttons' => [
-                ['id' => 'pay_now', 'title' => 'Pay Now'],
-                ['id' => 'view_cart', 'title' => 'View Cart'],
+                ['id' => 'orders', 'title' => 'Orders'],
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => 'Payment link ready.',
+            'footer' => 'Admin follow-up pending.',
         ]];
-    }
-
-    protected function deliveryHelperMessage(Store $store, Customer $customer): array
-    {
-        return [
-            'kind' => 'buttons',
-            'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => $this->storeEngine->deliverySummary($customer)."\nUse the WhatsApp catalog cart share to sync selected catalog items here.",
-            'buttons' => [
-                ['id' => 'view_cart', 'title' => 'View Cart'],
-                ['id' => 'save_address', 'title' => 'Save Address'],
-                ['id' => 'contact', 'title' => 'Contact'],
-            ],
-            'footer' => 'Cart stays saved until checkout.',
-        ];
     }
 
     protected function promptForAddress(Store $store, Conversation $conversation, ?string $prefix = null): array
@@ -460,6 +458,7 @@ class ChatbotEngineService
         }
 
         $customer = $this->storeEngine->saveDeliveryAddress($customer, $pincode, $address);
+        $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
         $this->setConversationContext($conversation, [
             'awaiting_address' => false,
         ]);
@@ -467,13 +466,13 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Delivery details saved.\n".$this->storeEngine->deliverySummary($customer),
+            'body' => "Delivery details saved.\n".$this->storeEngine->deliverySummary($customer)."\nOur store team will send your payment link shortly.",
             'buttons' => [
-                ['id' => 'view_cart', 'title' => 'View Cart'],
-                ['id' => 'checkout', 'title' => 'Checkout'],
+                ['id' => 'orders', 'title' => 'Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => 'Address saved for this customer.',
+            'footer' => 'Address saved for this order.',
         ]];
     }
 

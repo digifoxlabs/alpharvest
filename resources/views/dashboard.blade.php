@@ -82,6 +82,31 @@
             font-size: 12px;
             color: var(--muted);
         }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .actions form { margin: 0; }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(17, 35, 28, 0.14);
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--ink);
+            font: inherit;
+            cursor: pointer;
+        }
+        .flash {
+            padding: 16px 18px;
+            border-radius: 18px;
+            background: rgba(243, 180, 87, 0.18);
+            border: 1px solid rgba(243, 180, 87, 0.45);
+        }
         .api {
             background: var(--panel-dark);
             color: #f5f2e8;
@@ -110,6 +135,12 @@
                 and recent commerce activity into one backend-facing operational view.
             </p>
         </section>
+
+        @if (session('status'))
+            <section class="flash">
+                <strong>{{ session('status') }}</strong>
+            </section>
+        @endif
 
         <section class="grid">
             <article class="card">
@@ -152,7 +183,7 @@
                     @forelse ($overview['recent_orders'] as $order)
                         <div class="table-row">
                             <strong>{{ $order->order_number }} | {{ $order->customer?->name ?: $order->customer?->phone ?: 'Unknown customer' }}</strong>
-                            <span class="muted">{{ $order->store?->name }} | {{ ucfirst(str_replace('_', ' ', $order->payment_status)) }} | {{ $order->currency }} {{ number_format((float) $order->total, 2) }}</span>
+                            <span class="muted">{{ $order->store?->name }} | {{ ucfirst(str_replace('_', ' ', $order->status)) }} | {{ ucfirst(str_replace('_', ' ', $order->payment_status)) }} | {{ $order->currency }} {{ number_format((float) $order->total, 2) }}</span>
                             <span class="muted">
                                 Deliver to pincode: {{ data_get($order->metadata, 'delivery.pincode') ?: 'Not saved' }}
                                 | Address: {{ data_get($order->metadata, 'delivery.address') ?: 'Not saved' }}
@@ -161,6 +192,21 @@
                                 Products:
                                 {{ $order->items->map(fn ($item) => $item->quantity.' x '.$item->product_name)->implode(', ') ?: 'No items' }}
                             </span>
+                            <span class="muted">
+                                Customer: {{ $order->customer?->phone ?: 'No phone' }}
+                                | Address requested: {{ data_get($order->metadata, 'admin_follow_up.address_requested_at') ? 'Yes' : 'No' }}
+                                | Payment link sent: {{ data_get($order->metadata, 'admin_follow_up.payment_link_sent_at') ? 'Yes' : 'No' }}
+                            </span>
+                            <div class="actions">
+                                <form method="POST" action="{{ route('dashboard.orders.request-address', [$tenant, $order]) }}">
+                                    @csrf
+                                    <button class="chip" type="submit">Request Address</button>
+                                </form>
+                                <form method="POST" action="{{ route('dashboard.orders.send-payment-link', [$tenant, $order]) }}">
+                                    @csrf
+                                    <button class="chip" type="submit">Send Payment Link</button>
+                                </form>
+                            </div>
                         </div>
                     @empty
                         <p class="muted">No orders yet.</p>

@@ -788,7 +788,7 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertSame('unpaid', $order->payment_status);
     }
 
-    public function test_catalog_order_payload_syncs_native_catalog_items_into_app_cart(): void
+    public function test_catalog_order_payload_creates_an_order_for_admin_follow_up(): void
     {
         $counter = 0;
 
@@ -893,15 +893,31 @@ class WhatsAppWebhookTest extends TestCase
             'unit_price' => 12.00,
         ]);
 
-        $cartMessage = \App\Models\Message::query()
+        $order = \App\Models\Order::query()->latest('id')->firstOrFail();
+
+        $this->assertSame('awaiting_address', $order->status);
+        $this->assertSame('unpaid', $order->payment_status);
+
+        $this->assertDatabaseHas('order_items', [
+            'order_id' => $order->id,
+            'product_name' => 'Morning Lift Coffee',
+            'quantity' => 2,
+        ]);
+
+        $this->assertDatabaseHas('order_items', [
+            'order_id' => $order->id,
+            'product_name' => 'Focus Shot',
+            'quantity' => 1,
+        ]);
+
+        $confirmationMessage = \App\Models\Message::query()
             ->where('direction', 'outbound')
-            ->where('body', 'like', '%Your cart:%')
+            ->where('body', 'like', '%Your order has been placed successfully.%')
             ->latest('id')
             ->firstOrFail();
 
-        $this->assertStringContainsString('2 x Morning Lift Coffee (COF-250) = USD 37.00', $cartMessage->body);
-        $this->assertStringContainsString('1 x Focus Shot (FOC-100) = USD 12.00', $cartMessage->body);
-        $this->assertStringContainsString('Total: USD 49.00', $cartMessage->body);
+        $this->assertStringContainsString('Our store team will message you for address and payment.', $confirmationMessage->body);
+        $this->assertStringContainsString('USD 49.00', $confirmationMessage->body);
     }
 
     public function test_view_cart_waits_for_native_catalog_sync_instead_of_showing_a_stale_fallback_cart(): void
@@ -1149,13 +1165,14 @@ class WhatsAppWebhookTest extends TestCase
             'quantity' => 2,
         ]);
 
-        $cartMessage = \App\Models\Message::query()
+        $confirmationMessage = \App\Models\Message::query()
             ->where('direction', 'outbound')
-            ->where('body', 'like', '%Your cart:%')
+            ->where('body', 'like', '%Your order has been placed successfully.%')
             ->latest('id')
             ->firstOrFail();
 
-        $this->assertStringContainsString('2 x Catalog Product (CAT-001) = USD 30.00', $cartMessage->body);
-        $this->assertStringNotContainsString('Fallback Product', $cartMessage->body);
+        $this->assertStringContainsString('USD 30.00', $confirmationMessage->body);
+        $this->assertStringContainsString('Our store team will message you for address and payment.', $confirmationMessage->body);
+        $this->assertStringNotContainsString('Fallback Product', $confirmationMessage->body);
     }
 }

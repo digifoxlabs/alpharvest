@@ -9,10 +9,13 @@ use App\Http\Controllers\Web\AdminStoreController;
 use App\Http\Controllers\Web\AdminTenantController;
 use App\Http\Controllers\Web\PlatformController;
 use App\Http\Controllers\Web\FeedController;
+use App\Http\Controllers\Web\TenantOrderController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PlatformController::class, 'home'])->name('platform.home');
 Route::get('/dashboard/{tenant:slug}', [PlatformController::class, 'dashboard'])->name('dashboard.show');
+Route::post('/dashboard/{tenant:slug}/orders/{order}/request-address', [TenantOrderController::class, 'requestAddress'])->name('dashboard.orders.request-address');
+Route::post('/dashboard/{tenant:slug}/orders/{order}/send-payment-link', [TenantOrderController::class, 'sendPaymentLink'])->name('dashboard.orders.send-payment-link');
 Route::get('/stores/{store:slug}/products/{product}', [PlatformController::class, 'product'])->name('platform.products.show');
 Route::get('/feeds/meta-products', [FeedController::class, 'metaProducts'])->name('feeds.meta-products');
 Route::get('/feeds/meta-placeholder.svg', [FeedController::class, 'metaPlaceholder'])->name('feeds.meta-placeholder');

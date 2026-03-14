@@ -129,8 +129,14 @@ class WhatsAppWebhookService
             ])->save();
 
             if ($catalogSync['matched_count'] > 0) {
-                $inbound['command'] = 'view_cart';
-                $inbound['body'] = 'Catalog cart shared';
+                $order = $this->storeEngine->checkout($store, $customer, $conversation);
+
+                if ($order) {
+                    $this->storeEngine->prepareOrderForAdminFollowUp($order, Arr::get($message, 'order', []));
+                }
+
+                $inbound['command'] = 'catalog_order_received';
+                $inbound['body'] = 'Catalog order placed';
             } else {
                 $inbound['command'] = 'catalog_sync_failed';
                 $inbound['body'] = 'Catalog cart could not be matched';

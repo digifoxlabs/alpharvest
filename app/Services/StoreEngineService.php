@@ -623,6 +623,31 @@ class StoreEngineService
         });
     }
 
+    public function prepareOrderForAdminFollowUp(Order $order, array $catalogOrder = []): Order
+    {
+        $metadata = array_merge($order->metadata ?? [], [
+            'source' => data_get($order->metadata, 'source', 'whatsapp_catalog'),
+            'catalog' => array_filter([
+                'catalog_id' => Arr::get($catalogOrder, 'catalog_id'),
+                'item_count' => count(Arr::get($catalogOrder, 'product_items', [])),
+            ], fn ($value) => $value !== null && $value !== ''),
+            'admin_follow_up' => array_merge(data_get($order->metadata, 'admin_follow_up', []), [
+                'address_requested_at' => data_get($order->metadata, 'admin_follow_up.address_requested_at'),
+                'payment_link_sent_at' => data_get($order->metadata, 'admin_follow_up.payment_link_sent_at'),
+            ]),
+        ]);
+
+        $status = data_get($metadata, 'delivery.pincode') ? 'pending_payment' : 'awaiting_address';
+
+        $order->forceFill([
+            'status' => $status,
+            'payment_status' => $order->payment_status ?: 'unpaid',
+            'metadata' => $metadata,
+        ])->save();
+
+        return $order->fresh(['items', 'payments', 'customer', 'store']);
+    }
+
     public function latestOpenOrder(Store $store, Customer $customer): ?Order
     {
         return Order::query()
@@ -640,6 +665,25 @@ class StoreEngineService
             ->where('customer_id', $customer->id)
             ->latest('id')
             ->first();
+    }
+
+    public function syncLatestOpenOrderDelivery(Store $store, Customer $customer): ?Order
+    {
+        $order = $this->latestOpenOrder($store, $customer);
+
+        if (! $order) {
+            return null;
+        }
+
+        $metadata = $order->metadata ?? [];
+        $metadata['delivery'] = $this->deliveryDetails($customer);
+
+        $order->forceFill([
+            'status' => 'pending_payment',
+            'metadata' => $metadata,
+        ])->save();
+
+        return $order->fresh(['items', 'payments']);
     }
 
     public function currentOrderText(Store $store, Customer $customer, ?Conversation $conversation = null): string
