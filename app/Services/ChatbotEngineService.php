@@ -417,8 +417,8 @@ class ChatbotEngineService
             ];
         } elseif ($cart->items->isNotEmpty()) {
             $buttons = [
-                ['id' => 'view_cart', 'title' => 'View Cart'],
-                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'checkout', 'title' => 'Checkout'],
+                ['id' => 'visit_store', 'title' => 'Browse More'],
                 ['id' => 'clear_cart', 'title' => 'Clear Cart'],
             ];
         }

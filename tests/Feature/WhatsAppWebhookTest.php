@@ -602,6 +602,18 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertStringContainsString('Total: USD 51.00', $cartMessage->body);
         $this->assertStringContainsString('Deliver to pincode: not saved yet.', $cartMessage->body);
 
+        $cartDispatch = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn (Request $request) => str_contains(data_get($request->data(), 'interactive.body.text', ''), 'Your cart:'));
+
+        $this->assertNotNull($cartDispatch);
+        $this->assertSame(
+            ['Checkout', 'Browse More', 'Clear Cart'],
+            collect(data_get($cartDispatch->data(), 'interactive.action.buttons', []))
+                ->pluck('reply.title')
+                ->all()
+        );
+
         $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.clear-cart', 'clear_cart', 'Clear Cart'))->assertOk();
 
         $this->assertDatabaseMissing('cart_items', [
