@@ -285,6 +285,49 @@
             color: var(--danger);
         }
 
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            background: rgba(23, 49, 40, 0.08);
+        }
+
+        .badge.success {
+            background: rgba(31, 138, 95, 0.14);
+            color: var(--accent-dark);
+        }
+
+        .badge.warning {
+            background: rgba(214, 161, 63, 0.16);
+            color: #8a641a;
+        }
+
+        .badge.danger {
+            background: rgba(182, 73, 60, 0.12);
+            color: var(--danger);
+        }
+
+        .chip-row,
+        .checklist {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .callout {
+            padding: 16px 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid var(--line);
+            display: grid;
+            gap: 10px;
+        }
+
         @media (max-width: 1024px) {
             .admin-shell {
                 grid-template-columns: 1fr;
@@ -310,6 +353,7 @@
                 <a href="{{ route('admin.tenants.index') }}" class="{{ request()->routeIs('admin.tenants.*') ? 'active' : '' }}">Tenants</a>
                 <a href="{{ route('admin.stores.index') }}" class="{{ request()->routeIs('admin.stores.*') ? 'active' : '' }}">Stores</a>
                 <a href="{{ route('admin.categories.index') }}" class="{{ request()->routeIs('admin.categories.*') ? 'active' : '' }}">Categories</a>
+                <a href="{{ route('admin.messages.index') }}" class="{{ request()->routeIs('admin.messages.*') ? 'active' : '' }}">Messages</a>
                 <a href="{{ route('admin.products.index') }}" class="{{ request()->routeIs('admin.products.*') ? 'active' : '' }}">Products</a>
                 <a href="{{ route('platform.home') }}">Public home</a>
             </nav>

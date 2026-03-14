@@ -134,16 +134,65 @@ class StoreEngineService
             ->get();
     }
 
-    public function canSendWhatsAppCatalog(Store $store): bool
+    public function whatsappCatalogReadiness(Store $store): array
     {
-        if (! $store->meta_catalog_id) {
-            return false;
-        }
+        $activeProducts = $store->products()
+            ->where('is_active', true)
+            ->count();
 
-        return $store->products()
+        $catalogProducts = $store->products()
             ->where('is_active', true)
             ->whereNotNull('meta_retailer_id')
-            ->exists();
+            ->count();
+
+        $checks = [
+            'store_active' => (bool) $store->is_active,
+            'phone_number_id' => (bool) ($store->whatsapp_phone_number_id ?: config('services.whatsapp.phone_number_id')),
+            'access_token' => (bool) ($store->getRawOriginal('meta_access_token') ?: config('services.whatsapp.token')),
+            'meta_catalog_id' => (bool) $store->meta_catalog_id,
+            'mapped_products' => $catalogProducts > 0,
+        ];
+
+        $issues = [];
+
+        if (! $checks['store_active']) {
+            $issues[] = 'Store is inactive.';
+        }
+
+        if (! $checks['phone_number_id']) {
+            $issues[] = 'WhatsApp phone number ID is missing.';
+        }
+
+        if (! $checks['access_token']) {
+            $issues[] = 'Meta access token is missing.';
+        }
+
+        if (! $checks['meta_catalog_id']) {
+            $issues[] = 'Meta catalog ID is missing.';
+        }
+
+        if ($activeProducts === 0) {
+            $issues[] = 'No active products are available.';
+        } elseif (! $checks['mapped_products']) {
+            $issues[] = 'Active products need Meta retailer IDs before the native catalog can be sent.';
+        }
+
+        return [
+            'ready' => $checks['store_active']
+                && $checks['phone_number_id']
+                && $checks['access_token']
+                && $checks['meta_catalog_id']
+                && $checks['mapped_products'],
+            'checks' => $checks,
+            'active_products' => $activeProducts,
+            'catalog_products' => $catalogProducts,
+            'issues' => $issues,
+        ];
+    }
+
+    public function canSendWhatsAppCatalog(Store $store): bool
+    {
+        return $this->whatsappCatalogReadiness($store)['ready'];
     }
 
     public function whatsappCatalogSections(Store $store, int $maxSections = 10, int $maxItemsPerSection = 30): array

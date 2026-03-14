@@ -119,12 +119,31 @@
             <div class="table">
                 @forelse ($stores as $store)
                     <div class="table-row">
+                        @php($readiness = $store->catalog_readiness)
                         <div>
-                            <strong>{{ $store->name }}</strong>
+                            <div class="actions">
+                                <strong>{{ $store->name }}</strong>
+                                <span class="badge {{ $readiness['ready'] ? 'success' : 'warning' }}">
+                                    {{ $readiness['ready'] ? 'Native catalog ready' : 'Native catalog needs setup' }}
+                                </span>
+                            </div>
                             <p class="muted">{{ $store->tenant?->name }} | {{ $store->slug }} | {{ $store->currency }}</p>
                             <p class="muted">{{ $store->categories_count }} categories | {{ $store->products_count }} products | {{ $store->orders_count }} orders</p>
                             <p class="muted">Catalog: {{ $store->meta_catalog_id ?: 'Not linked' }}</p>
                             <p class="muted">{{ $store->contact_email ?: 'No email' }} | {{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</p>
+                            <div class="chip-row">
+                                <span class="badge {{ $readiness['checks']['phone_number_id'] ? 'success' : 'warning' }}">Phone ID</span>
+                                <span class="badge {{ $readiness['checks']['access_token'] ? 'success' : 'warning' }}">Access token</span>
+                                <span class="badge {{ $readiness['checks']['meta_catalog_id'] ? 'success' : 'warning' }}">Catalog ID</span>
+                                <span class="badge {{ $readiness['checks']['mapped_products'] ? 'success' : 'warning' }}">
+                                    Mapped products {{ $readiness['catalog_products'] }}/{{ $readiness['active_products'] }}
+                                </span>
+                            </div>
+                            @if ($readiness['issues'] !== [])
+                                <p class="muted">{{ implode(' ', $readiness['issues']) }}</p>
+                            @else
+                                <p class="muted">This store meets the app-side checks for the native WhatsApp multi-product catalog.</p>
+                            @endif
                             @if ($store->whatsapp_store_image_url)
                                 <img src="{{ $store->whatsapp_store_image_url }}" alt="{{ $store->name }}" class="thumb">
                             @endif

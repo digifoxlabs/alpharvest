@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Message;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Store;
@@ -19,6 +20,7 @@ class AdminDashboardController extends Controller
                 'stores' => Store::query()->count(),
                 'categories' => ProductCategory::query()->count(),
                 'products' => Product::query()->count(),
+                'messages' => Message::query()->count(),
             ],
             'tenants' => Tenant::query()
                 ->withCount('stores')
@@ -33,6 +35,11 @@ class AdminDashboardController extends Controller
                 ->get(),
             'products' => Product::query()
                 ->with(['store.tenant', 'category'])
+                ->latest('id')
+                ->limit(8)
+                ->get(),
+            'recentMessages' => Message::query()
+                ->with(['conversation.customer', 'conversation.store.tenant'])
                 ->latest('id')
                 ->limit(8)
                 ->get(),

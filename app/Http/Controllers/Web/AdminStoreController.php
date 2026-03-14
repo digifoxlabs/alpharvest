@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Store;
 use App\Models\Tenant;
+use App\Services\StoreEngineService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,14 +14,23 @@ use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
 {
+    public function __construct(protected StoreEngineService $storeEngine)
+    {
+    }
+
     public function index(): View
     {
+        $stores = Store::query()
+            ->with('tenant')
+            ->withCount(['categories', 'products', 'orders'])
+            ->orderBy('name')
+            ->get()
+            ->each(function (Store $store) {
+                $store->setAttribute('catalog_readiness', $this->storeEngine->whatsappCatalogReadiness($store));
+            });
+
         return view('admin.stores.index', [
-            'stores' => Store::query()
-                ->with('tenant')
-                ->withCount(['categories', 'products', 'orders'])
-                ->orderBy('name')
-                ->get(),
+            'stores' => $stores,
             'tenants' => Tenant::query()->orderBy('name')->get(),
         ]);
     }
@@ -41,6 +51,7 @@ class AdminStoreController extends Controller
     {
         return view('admin.stores.edit', [
             'store' => $store,
+            'catalogReadiness' => $this->storeEngine->whatsappCatalogReadiness($store),
             'tenants' => Tenant::query()->orderBy('name')->get(),
         ]);
     }

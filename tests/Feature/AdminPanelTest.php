@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\VerifyCsrfToken;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Message;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Store;
@@ -146,5 +149,74 @@ class AdminPanelTest extends TestCase
             'price' => 31.99,
             'inventory_quantity' => 18,
         ]);
+    }
+
+    public function test_admin_can_view_catalog_readiness_and_message_statuses(): void
+    {
+        Http::fake();
+
+        $tenant = Tenant::factory()->create([
+            'name' => 'Northwind Commerce',
+        ]);
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Northwind Wellness',
+            'slug' => 'northwind-wellness',
+            'whatsapp_phone_number_id' => '4477889900',
+            'meta_catalog_id' => '5544332211',
+            'meta_access_token' => 'secret-token',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Daily Calm',
+            'slug' => 'daily-calm',
+            'sku' => 'CAL-001',
+            'meta_retailer_id' => 'catalog-CAL-001',
+            'inventory_quantity' => 12,
+        ]);
+
+        $customer = Customer::factory()->create([
+            'store_id' => $store->id,
+            'phone' => '15551234567',
+        ]);
+
+        $conversation = Conversation::create([
+            'store_id' => $store->id,
+            'customer_id' => $customer->id,
+            'status' => 'open',
+            'source' => 'whatsapp',
+            'last_message_at' => now(),
+        ]);
+
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'outbound',
+            'type' => 'interactive',
+            'whatsapp_message_id' => 'wamid.outbound.1',
+            'body' => 'Catalog sent.',
+            'payload' => ['dispatched' => true],
+            'sent_at' => now()->subMinute(),
+            'delivered_at' => now(),
+        ]);
+
+        $this->get(route('admin.stores.index'))
+            ->assertOk()
+            ->assertSee('Native catalog ready')
+            ->assertSee('Mapped products 1/1');
+
+        $this->get(route('admin.messages.index'))
+            ->assertOk()
+            ->assertSee('Message statuses')
+            ->assertSee('Delivered')
+            ->assertSee('Catalog sent.');
     }
 }

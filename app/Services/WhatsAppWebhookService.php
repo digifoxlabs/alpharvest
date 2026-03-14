@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\Store;
 use App\Models\WebhookEvent;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -46,6 +47,10 @@ class WhatsAppWebhookService
 
                     foreach (Arr::get($value, 'messages', []) as $message) {
                         $this->processInboundMessage($store, $message, $value);
+                    }
+
+                    foreach (Arr::get($value, 'statuses', []) as $status) {
+                        $this->processStatusUpdate($status);
                     }
 
                     $event->forceFill([
@@ -176,5 +181,45 @@ class WhatsAppWebhookService
             'buttons', 'image_buttons', 'list', 'product_list' => 'interactive',
             default => 'text',
         };
+    }
+
+    protected function processStatusUpdate(array $status): void
+    {
+        $message = Message::query()
+            ->where('whatsapp_message_id', Arr::get($status, 'id'))
+            ->first();
+
+        if (! $message) {
+            return;
+        }
+
+        $timestamp = Arr::get($status, 'timestamp');
+        $at = $timestamp ? Carbon::createFromTimestamp((int) $timestamp) : now();
+        $payload = array_merge($message->payload ?? [], [
+            'status_update' => $status,
+        ]);
+
+        $attributes = [
+            'payload' => $payload,
+        ];
+
+        switch (Arr::get($status, 'status')) {
+            case 'sent':
+                $attributes['sent_at'] = $message->sent_at ?: $at;
+                break;
+
+            case 'delivered':
+                $attributes['sent_at'] = $message->sent_at ?: $at;
+                $attributes['delivered_at'] = $at;
+                break;
+
+            case 'read':
+                $attributes['sent_at'] = $message->sent_at ?: $at;
+                $attributes['delivered_at'] = $message->delivered_at ?: $at;
+                $attributes['read_at'] = $at;
+                break;
+        }
+
+        $message->forceFill($attributes)->save();
     }
 }

@@ -22,6 +22,10 @@
             <strong>{{ $metrics['products'] }}</strong>
             <span class="muted">products</span>
         </article>
+        <article class="metric">
+            <strong>{{ $metrics['messages'] }}</strong>
+            <span class="muted">messages</span>
+        </article>
     </section>
 
     <section class="grid columns-2">
@@ -75,6 +79,7 @@
                 <p class="muted">Inventory across all tenant stores.</p>
             </div>
             <div class="actions">
+                <a class="button secondary" href="{{ route('admin.messages.index') }}">Message statuses</a>
                 <a class="button secondary" href="{{ route('admin.categories.index') }}">Manage categories</a>
                 <a class="button" href="{{ route('admin.products.index') }}">Manage products</a>
             </div>
@@ -88,6 +93,31 @@
                 </div>
             @empty
                 <p class="muted">No products yet.</p>
+            @endforelse
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="table-header">
+            <div>
+                <h2>Latest message activity</h2>
+                <p class="muted">Outbound delivery state and inbound customer activity across stores.</p>
+            </div>
+            <a class="button secondary" href="{{ route('admin.messages.index') }}">Open messages</a>
+        </div>
+
+        <div class="table">
+            @forelse ($recentMessages as $message)
+                <div class="table-row">
+                    <div class="actions">
+                        <strong>{{ $message->conversation?->store?->name ?: 'Unknown store' }}</strong>
+                        <span class="badge {{ $message->status_tone }}">{{ $message->status_label }}</span>
+                    </div>
+                    <span class="muted">{{ ucfirst($message->direction) }} | {{ $message->type }} | {{ $message->conversation?->customer?->phone ?: 'Unknown customer' }}</span>
+                    <span class="muted">{{ $message->body ?: 'No message body stored.' }}</span>
+                </div>
+            @empty
+                <p class="muted">No messages yet.</p>
             @endforelse
         </div>
     </section>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Web\CheckoutController;
 use App\Http\Controllers\Web\AdminCategoryController;
 use App\Http\Controllers\Web\AdminDashboardController;
+use App\Http\Controllers\Web\AdminMessageController;
 use App\Http\Controllers\Web\AdminProductController;
 use App\Http\Controllers\Web\AdminStoreController;
 use App\Http\Controllers\Web\AdminTenantController;
@@ -38,6 +39,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/categories/{category}/edit', [AdminCategoryController::class, 'edit'])->name('categories.edit');
     Route::put('/categories/{category}', [AdminCategoryController::class, 'update'])->name('categories.update');
     Route::delete('/categories/{category}', [AdminCategoryController::class, 'destroy'])->name('categories.destroy');
+
+    Route::get('/messages', [AdminMessageController::class, 'index'])->name('messages.index');
 
     Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
     Route::post('/products', [AdminProductController::class, 'store'])->name('products.store');

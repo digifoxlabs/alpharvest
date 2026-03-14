@@ -231,4 +231,96 @@ class WhatsAppWebhookTest extends TestCase
                 && $buttons === ['Checkout', 'Visit Store', 'Orders'];
         });
     }
+
+    public function test_status_webhooks_update_outbound_message_delivery_state(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $hiPayload = [
+            'entry' => [[
+                'id' => 'entry-hi',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.1',
+                            'from' => '15551234567',
+                            'type' => 'text',
+                            'text' => [
+                                'body' => 'Hi',
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $hiPayload)->assertOk();
+
+        $statusPayload = [
+            'entry' => [[
+                'id' => 'entry-status',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'statuses' => [[
+                            'id' => 'wamid.outbound.1',
+                            'status' => 'read',
+                            'timestamp' => (string) now()->timestamp,
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $statusPayload)
+            ->assertOk()
+            ->assertJson(['status' => 'accepted']);
+
+        $this->assertDatabaseHas('messages', [
+            'whatsapp_message_id' => 'wamid.outbound.1',
+        ]);
+
+        $message = \App\Models\Message::query()
+            ->where('whatsapp_message_id', 'wamid.outbound.1')
+            ->firstOrFail();
+
+        $this->assertNotNull($message->read_at);
+        $this->assertNotNull($message->delivered_at);
+        $this->assertSame('read', data_get($message->payload, 'status_update.status'));
+    }
 }
