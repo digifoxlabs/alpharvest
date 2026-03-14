@@ -113,16 +113,27 @@ class WhatsAppWebhookService
         $inbound = $this->extractInboundPayload($message);
 
         if (Arr::get($message, 'type') === 'order') {
-            $cart = $this->storeEngine->syncCartFromCatalogOrder(
+            $catalogSync = $this->storeEngine->syncCartFromCatalogOrder(
                 $store,
                 $customer,
                 $conversation,
                 Arr::get($message, 'order', [])
             );
 
-            if ($cart) {
+            $conversation->forceFill([
+                'context' => array_merge($conversation->context ?? [], [
+                    'catalog_sync_pending' => false,
+                    'last_catalog_sync_requested' => $catalogSync['requested_count'],
+                    'last_catalog_sync_matched' => $catalogSync['matched_count'],
+                ]),
+            ])->save();
+
+            if ($catalogSync['matched_count'] > 0) {
                 $inbound['command'] = 'view_cart';
                 $inbound['body'] = 'Catalog cart shared';
+            } else {
+                $inbound['command'] = 'catalog_sync_failed';
+                $inbound['body'] = 'Catalog cart could not be matched';
             }
         }
 

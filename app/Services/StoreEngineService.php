@@ -474,9 +474,11 @@ class StoreEngineService
         });
     }
 
-    public function syncCartFromCatalogOrder(Store $store, Customer $customer, Conversation $conversation, array $catalogOrder): ?Cart
+    public function syncCartFromCatalogOrder(Store $store, Customer $customer, Conversation $conversation, array $catalogOrder): array
     {
-        $items = collect(Arr::get($catalogOrder, 'product_items', []))
+        $requestedItems = collect(Arr::get($catalogOrder, 'product_items', []));
+
+        $items = $requestedItems
             ->map(function (array $item) use ($store) {
                 $retailerId = (string) Arr::get($item, 'product_retailer_id', '');
                 $product = $retailerId !== '' ? $this->findProductByCatalogRetailerId($store, $retailerId) : null;
@@ -495,11 +497,7 @@ class StoreEngineService
             ->filter()
             ->values();
 
-        if ($items->isEmpty()) {
-            return null;
-        }
-
-        return DB::transaction(function () use ($store, $customer, $conversation, $items) {
+        $cart = DB::transaction(function () use ($store, $customer, $conversation, $items) {
             $cart = $this->activeCart($store, $customer, $conversation);
 
             CartItem::query()
@@ -518,6 +516,12 @@ class StoreEngineService
 
             return $this->refreshCartTotals($cart);
         });
+
+        return [
+            'cart' => $items->isNotEmpty() ? $cart : null,
+            'requested_count' => $requestedItems->count(),
+            'matched_count' => $items->count(),
+        ];
     }
 
     public function refreshCartTotals(Cart $cart): Cart

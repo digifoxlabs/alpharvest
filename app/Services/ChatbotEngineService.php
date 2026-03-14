@@ -37,10 +37,14 @@ class ChatbotEngineService
         }
 
         if (in_array($command, ['visit_store', 'menu', 'browse', 'products', 'storefront'], true)) {
-            return $this->storefrontMessages($store, $customer);
+            return $this->storefrontMessages($store, $customer, $conversation);
         }
 
         if (in_array($command, ['orders', 'current_order', 'cart', 'view_cart'], true)) {
+            if ($this->isCatalogSyncPending($conversation)) {
+                return [$this->catalogSyncPendingMessage($store)];
+            }
+
             return $this->orderMessages($store, $customer, $conversation);
         }
 
@@ -58,6 +62,20 @@ class ChatbotEngineService
             return [$this->promptForAddress($store, $conversation)];
         }
 
+        if ($command === 'catalog_sync_failed') {
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "We could not match the catalog items shared from WhatsApp to this store yet.\nPlease open Visit Store again, add products from the catalog, and share the catalog cart once more.",
+                'buttons' => [
+                    ['id' => 'visit_store', 'title' => 'Visit Store'],
+                    ['id' => 'orders', 'title' => 'Orders'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Catalog sync needs another try.',
+            ]];
+        }
+
         if (in_array($command, ['clear_cart', 'empty_cart'], true)) {
             $cart = $this->storeEngine->clearCart($store, $customer, $conversation);
 
@@ -73,6 +91,10 @@ class ChatbotEngineService
         }
 
         if ($command === 'checkout') {
+            if ($this->isCatalogSyncPending($conversation)) {
+                return [$this->catalogSyncPendingMessage($store)];
+            }
+
             if (! $this->storeEngine->deliveryDetails($customer)['is_saved']) {
                 return [
                     $this->promptForAddress($store, $conversation, 'Save delivery details before checkout.'),
@@ -94,6 +116,10 @@ class ChatbotEngineService
         }
 
         if (in_array($command, ['pay', 'pay_now'], true)) {
+            if ($this->isCatalogSyncPending($conversation)) {
+                return [$this->catalogSyncPendingMessage($store)];
+            }
+
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->checkout($store, $customer, $conversation);
 
@@ -121,6 +147,10 @@ class ChatbotEngineService
         }
 
         if (Str::startsWith($command, 'add_to_cart:')) {
+            $this->setConversationContext($conversation, [
+                'catalog_sync_pending' => false,
+            ]);
+
             $productId = (int) Str::after($command, 'add_to_cart:');
             $product = $this->storeEngine->findProductById($store, $productId);
 
@@ -190,11 +220,15 @@ class ChatbotEngineService
         ];
     }
 
-    protected function storefrontMessages(Store $store, Customer $customer): array
+    protected function storefrontMessages(Store $store, Customer $customer, Conversation $conversation): array
     {
         $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
 
         if ($catalogReadiness['ready'] && $catalogReadiness['checks']['mapped_products']) {
+            $this->setConversationContext($conversation, [
+                'catalog_sync_pending' => true,
+            ]);
+
             return [[
                 'kind' => 'product_list',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
@@ -205,12 +239,20 @@ class ChatbotEngineService
         }
 
         if ($catalogReadiness['ready']) {
+            $this->setConversationContext($conversation, [
+                'catalog_sync_pending' => true,
+            ]);
+
             return [[
                 'kind' => 'catalog_message',
                 'body' => $this->storeEngine->storeIntroText($store),
                 'footer' => 'Open the full store inside WhatsApp.',
             ], $this->deliveryHelperMessage($store, $customer)];
         }
+
+        $this->setConversationContext($conversation, [
+            'catalog_sync_pending' => false,
+        ]);
 
         return array_merge(
             $this->fallbackStorefrontMessages($store),
@@ -440,6 +482,11 @@ class ChatbotEngineService
         return (bool) data_get($conversation->context, 'awaiting_address', false);
     }
 
+    protected function isCatalogSyncPending(Conversation $conversation): bool
+    {
+        return (bool) data_get($conversation->context, 'catalog_sync_pending', false);
+    }
+
     protected function setConversationContext(Conversation $conversation, array $context): void
     {
         $current = $conversation->context ?? [];
@@ -447,5 +494,20 @@ class ChatbotEngineService
         $conversation->forceFill([
             'context' => array_merge($current, $context),
         ])->save();
+    }
+
+    protected function catalogSyncPendingMessage(Store $store): array
+    {
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => "Your catalog selections have not been synced into the bot cart yet.\nAfter choosing products in the WhatsApp catalog, use the catalog cart share/send action, then tap View Cart again.",
+            'buttons' => [
+                ['id' => 'visit_store', 'title' => 'Visit Store'],
+                ['id' => 'contact', 'title' => 'Contact'],
+                ['id' => 'orders', 'title' => 'Orders'],
+            ],
+            'footer' => 'Waiting for catalog cart sync.',
+        ];
     }
 }

@@ -903,4 +903,259 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertStringContainsString('1 x Focus Shot (FOC-100) = USD 12.00', $cartMessage->body);
         $this->assertStringContainsString('Total: USD 49.00', $cartMessage->body);
     }
+
+    public function test_view_cart_waits_for_native_catalog_sync_instead_of_showing_a_stale_fallback_cart(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'meta_catalog_id' => '5566778899',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        $fallbackProduct = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Fallback Product',
+            'slug' => 'fallback-product',
+            'sku' => 'FBK-001',
+            'price' => 10.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Catalog Product',
+            'slug' => 'catalog-product',
+            'sku' => 'CAT-001',
+            'meta_retailer_id' => 'CAT-001',
+            'price' => 15.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        $sendPayload = function (string $messageId, array $message) {
+            return [
+                'entry' => [[
+                    'id' => 'entry-'.$messageId,
+                    'changes' => [[
+                        'field' => 'messages',
+                        'value' => [
+                            'metadata' => [
+                                'phone_number_id' => '1234567890',
+                            ],
+                            'contacts' => [[
+                                'profile' => [
+                                    'name' => 'Riya Sharma',
+                                ],
+                            ]],
+                            'messages' => [$message],
+                        ],
+                    ]],
+                ]],
+            ];
+        };
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('add-fallback', [
+            'id' => 'wamid.inbound.add-fallback',
+            'from' => '15551234567',
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button_reply',
+                'button_reply' => [
+                    'id' => 'add_to_cart:'.$fallbackProduct->id,
+                    'title' => 'Add to Cart',
+                ],
+            ],
+        ]))->assertOk();
+
+        $this->assertDatabaseHas('cart_items', [
+            'product_id' => $fallbackProduct->id,
+            'quantity' => 1,
+        ]);
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('visit-store', [
+            'id' => 'wamid.inbound.visit-store',
+            'from' => '15551234567',
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button_reply',
+                'button_reply' => [
+                    'id' => 'visit_store',
+                    'title' => 'Visit Store',
+                ],
+            ],
+        ]))->assertOk();
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('view-cart', [
+            'id' => 'wamid.inbound.view-cart',
+            'from' => '15551234567',
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button_reply',
+                'button_reply' => [
+                    'id' => 'view_cart',
+                    'title' => 'View Cart',
+                ],
+            ],
+        ]))->assertOk();
+
+        $pendingMessage = \App\Models\Message::query()
+            ->where('direction', 'outbound')
+            ->where('body', 'like', '%Waiting for catalog cart sync.%')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('Your catalog selections have not been synced into the bot cart yet.', $pendingMessage->body);
+        $this->assertStringNotContainsString('Fallback Product', $pendingMessage->body);
+    }
+
+    public function test_catalog_order_sync_replaces_stale_fallback_cart_items(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'meta_catalog_id' => '5566778899',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        $fallbackProduct = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Fallback Product',
+            'slug' => 'fallback-product',
+            'sku' => 'FBK-001',
+            'price' => 10.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        $catalogProduct = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Catalog Product',
+            'slug' => 'catalog-product',
+            'sku' => 'CAT-001',
+            'meta_retailer_id' => 'CAT-001',
+            'price' => 15.00,
+            'inventory_quantity' => 10,
+        ]);
+
+        $sendPayload = function (string $messageId, array $message) {
+            return [
+                'entry' => [[
+                    'id' => 'entry-'.$messageId,
+                    'changes' => [[
+                        'field' => 'messages',
+                        'value' => [
+                            'metadata' => [
+                                'phone_number_id' => '1234567890',
+                            ],
+                            'contacts' => [[
+                                'profile' => [
+                                    'name' => 'Riya Sharma',
+                                ],
+                            ]],
+                            'messages' => [$message],
+                        ],
+                    ]],
+                ]],
+            ];
+        };
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('add-fallback', [
+            'id' => 'wamid.inbound.add-fallback',
+            'from' => '15551234567',
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button_reply',
+                'button_reply' => [
+                    'id' => 'add_to_cart:'.$fallbackProduct->id,
+                    'title' => 'Add to Cart',
+                ],
+            ],
+        ]))->assertOk();
+
+        $this->postJson('/api/whatsapp/webhook', $sendPayload('native-cart', [
+            'id' => 'wamid.inbound.native-cart',
+            'from' => '15551234567',
+            'type' => 'order',
+            'order' => [
+                'catalog_id' => '5566778899',
+                'product_items' => [
+                    [
+                        'product_retailer_id' => 'CAT-001',
+                        'quantity' => '2',
+                    ],
+                ],
+            ],
+        ]))->assertOk();
+
+        $this->assertDatabaseMissing('cart_items', [
+            'product_id' => $fallbackProduct->id,
+        ]);
+
+        $this->assertDatabaseHas('cart_items', [
+            'product_id' => $catalogProduct->id,
+            'quantity' => 2,
+        ]);
+
+        $cartMessage = \App\Models\Message::query()
+            ->where('direction', 'outbound')
+            ->where('body', 'like', '%Your cart:%')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('2 x Catalog Product (CAT-001) = USD 30.00', $cartMessage->body);
+        $this->assertStringNotContainsString('Fallback Product', $cartMessage->body);
+    }
 }
