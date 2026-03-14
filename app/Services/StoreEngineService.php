@@ -125,6 +125,47 @@ class StoreEngineService
         return implode("\n", $lines);
     }
 
+    public function deliveryDetails(Customer $customer): array
+    {
+        $delivery = data_get($customer->metadata, 'delivery', []);
+
+        $pincode = trim((string) ($delivery['pincode'] ?? ''));
+        $address = trim((string) ($delivery['address'] ?? ''));
+
+        return [
+            'pincode' => $pincode ?: null,
+            'address' => $address ?: null,
+            'is_saved' => $pincode !== '' && $address !== '',
+        ];
+    }
+
+    public function deliverySummary(Customer $customer): string
+    {
+        $delivery = $this->deliveryDetails($customer);
+
+        if (! $delivery['is_saved']) {
+            return "Deliver to pincode: not saved yet.\nTap Save Address and send your pincode plus full delivery address.";
+        }
+
+        return "Deliver to pincode: {$delivery['pincode']}\nAddress: {$delivery['address']}";
+    }
+
+    public function saveDeliveryAddress(Customer $customer, string $pincode, string $address): Customer
+    {
+        $metadata = $customer->metadata ?? [];
+        $metadata['delivery'] = [
+            'pincode' => trim($pincode),
+            'address' => trim($address),
+            'saved_at' => now()->toIso8601String(),
+        ];
+
+        $customer->forceFill([
+            'metadata' => $metadata,
+        ])->save();
+
+        return $customer->fresh();
+    }
+
     public function featuredProducts(Store $store, int $limit = 4): Collection
     {
         return $store->products()
@@ -209,9 +250,9 @@ class StoreEngineService
             ])
             ->get()
             ->filter(fn (ProductCategory $category) => $category->products->isNotEmpty())
-            ->take($maxSections);
+            ->values();
 
-        $sections = $categories->map(function (ProductCategory $category) use ($maxItemsPerSection) {
+        $categorySections = $categories->take(max(min($maxSections - 1, 3), 0))->map(function (ProductCategory $category) use ($maxItemsPerSection) {
             return [
                 'title' => Str::limit($category->name, 24, ''),
                 'product_items' => $category->products
@@ -222,26 +263,39 @@ class StoreEngineService
                     ->values()
                     ->all(),
             ];
-        })->values()->all();
+        })->values();
 
-        if ($sections !== []) {
-            return $sections;
-        }
-
-        $products = $store->products()
+        $allProducts = $store->products()
             ->where('is_active', true)
             ->whereNotNull('meta_retailer_id')
             ->orderBy('name')
             ->limit($maxItemsPerSection)
             ->get();
 
-        if ($products->isEmpty()) {
+        $sections = $categorySections;
+
+        if ($allProducts->isNotEmpty() && $sections->count() < $maxSections) {
+            $sections->push([
+                'title' => 'See All',
+                'product_items' => $allProducts->map(fn (Product $product) => [
+                    'product_retailer_id' => $product->meta_retailer_id,
+                ])->values()->all(),
+            ]);
+        }
+
+        $sections = $sections->all();
+
+        if ($sections !== []) {
+            return $sections;
+        }
+
+        if ($allProducts->isEmpty()) {
             return [];
         }
 
         return [[
             'title' => Str::limit($store->name, 24, ''),
-            'product_items' => $products->map(fn (Product $product) => [
+            'product_items' => $allProducts->map(fn (Product $product) => [
                 'product_retailer_id' => $product->meta_retailer_id,
             ])->values()->all(),
         ]];
@@ -435,6 +489,7 @@ class StoreEngineService
 
         $lines[] = '';
         $lines[] = 'Total: '.MoneyFormatter::format($cart->total, $store->currency);
+        $lines[] = $this->deliverySummary($customer);
         $lines[] = 'Choose Checkout when you are ready.';
 
         return implode("\n", $lines);
@@ -470,6 +525,9 @@ class StoreEngineService
                 'currency' => $store->currency,
                 'subtotal' => $cart->subtotal,
                 'total' => $cart->total,
+                'metadata' => [
+                    'delivery' => $this->deliveryDetails($customer),
+                ],
                 'placed_at' => now(),
             ]);
 
@@ -534,6 +592,14 @@ class StoreEngineService
                 foreach ($order->items as $item) {
                     $lines[] = "{$item->quantity} x {$item->product_name} = ".MoneyFormatter::format($item->total_price, $order->currency);
                 }
+            }
+
+            $delivery = data_get($order->metadata, 'delivery');
+
+            if (data_get($delivery, 'pincode') || data_get($delivery, 'address')) {
+                $lines[] = '';
+                $lines[] = 'Deliver to pincode: '.(data_get($delivery, 'pincode') ?: 'Not saved');
+                $lines[] = 'Address: '.(data_get($delivery, 'address') ?: 'Not saved');
             }
 
             return implode("\n", $lines);

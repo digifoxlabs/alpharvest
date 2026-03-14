@@ -22,7 +22,7 @@ class AgentInboxService
 
         $recentOrders = Order::query()
             ->whereIn('store_id', $storeIds)
-            ->with(['customer', 'store', 'payments'])
+            ->with(['customer', 'store', 'payments', 'items'])
             ->latest('id')
             ->limit(8)
             ->get();

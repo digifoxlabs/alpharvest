@@ -151,8 +151,16 @@
                 <div class="table" style="margin-top: 18px;">
                     @forelse ($overview['recent_orders'] as $order)
                         <div class="table-row">
-                            <strong>{{ $order->order_number }}</strong>
+                            <strong>{{ $order->order_number }} | {{ $order->customer?->name ?: $order->customer?->phone ?: 'Unknown customer' }}</strong>
                             <span class="muted">{{ $order->store?->name }} | {{ ucfirst(str_replace('_', ' ', $order->payment_status)) }} | {{ $order->currency }} {{ number_format((float) $order->total, 2) }}</span>
+                            <span class="muted">
+                                Deliver to pincode: {{ data_get($order->metadata, 'delivery.pincode') ?: 'Not saved' }}
+                                | Address: {{ data_get($order->metadata, 'delivery.address') ?: 'Not saved' }}
+                            </span>
+                            <span class="muted">
+                                Products:
+                                {{ $order->items->map(fn ($item) => $item->quantity.' x '.$item->product_name)->implode(', ') ?: 'No items' }}
+                            </span>
                         </div>
                     @empty
                         <p class="muted">No orders yet.</p>

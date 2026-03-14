@@ -124,6 +124,7 @@ class WhatsAppWebhookTest extends TestCase
 
         $category = ProductCategory::factory()->create([
             'store_id' => $store->id,
+            'name' => 'Wellness',
             'slug' => 'wellness',
         ]);
 
@@ -171,19 +172,25 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->postJson('/api/whatsapp/webhook', $visitStorePayload)->assertOk();
 
-        Http::assertSent(function (Request $request) {
-            $sections = $request->data()['interactive']['action']['sections'] ?? [];
-            $retailerIds = collect($sections)
-                ->flatMap(fn (array $section) => $section['product_items'] ?? [])
-                ->pluck('product_retailer_id')
-                ->all();
+        $request = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->first(fn (Request $request) => ($request->data()['interactive']['type'] ?? null) === 'product_list');
 
-            return ($request->data()['interactive']['type'] ?? null) === 'product_list'
-                && ($request->data()['interactive']['action']['catalog_id'] ?? null) === '5566778899'
-                && str_contains($request->data()['interactive']['body']['text'] ?? '', 'Browse our featured wellness products below.')
-                && in_array('catalog-COF-250', $retailerIds, true)
-                && ($request->data()['recipient_type'] ?? null) === 'individual';
-        });
+        $this->assertNotNull($request);
+
+        $sections = $request->data()['interactive']['action']['sections'] ?? [];
+        $retailerIds = collect($sections)
+            ->flatMap(fn (array $section) => $section['product_items'] ?? [])
+            ->pluck('product_retailer_id')
+            ->all();
+        $sectionTitles = collect($sections)->pluck('title')->all();
+
+        $this->assertSame('5566778899', $request->data()['interactive']['action']['catalog_id'] ?? null);
+        $this->assertStringContainsString('Browse our featured wellness products below.', $request->data()['interactive']['body']['text'] ?? '');
+        $this->assertContains('catalog-COF-250', $retailerIds);
+        $this->assertContains('Wellness', $sectionTitles);
+        $this->assertContains('See All', $sectionTitles);
+        $this->assertSame('individual', $request->data()['recipient_type'] ?? null);
     }
 
     public function test_visit_store_catalog_message_trims_oversized_intro_and_footer(): void
@@ -358,7 +365,7 @@ class WhatsAppWebhookTest extends TestCase
                 ->all();
 
             return str_contains($request->data()['interactive']['body']['text'] ?? '', 'Added to cart.')
-                && $buttons === ['Browse More', 'Checkout', 'Clear Cart'];
+                && $buttons === ['Browse More', 'View Cart', 'Checkout'];
         });
     }
 
@@ -500,10 +507,16 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->postJson('/api/whatsapp/webhook', $ordersPayload)->assertOk();
 
-        $this->assertDatabaseHas('messages', [
-            'direction' => 'outbound',
-            'body' => "AlphaHarvest Store\nYour cart:\n2 x Morning Lift Coffee (COF-250) = USD 37.00\n1 x Evening Calm Tea (TEA-180) = USD 14.00\n\nTotal: USD 51.00\nChoose Checkout when you are ready.\nOrder details inside WhatsApp.",
-        ]);
+        $cartMessage = \App\Models\Message::query()
+            ->where('direction', 'outbound')
+            ->where('body', 'like', "%Your cart:%")
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('2 x Morning Lift Coffee (COF-250) = USD 37.00', $cartMessage->body);
+        $this->assertStringContainsString('1 x Evening Calm Tea (TEA-180) = USD 14.00', $cartMessage->body);
+        $this->assertStringContainsString('Total: USD 51.00', $cartMessage->body);
+        $this->assertStringContainsString('Deliver to pincode: not saved yet.', $cartMessage->body);
 
         $this->postJson('/api/whatsapp/webhook', $sendPayload('wamid.inbound.clear-cart', 'clear_cart', 'Clear Cart'))->assertOk();
 
@@ -611,5 +624,167 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertNotNull($message->read_at);
         $this->assertNotNull($message->delivered_at);
         $this->assertSame('read', data_get($message->payload, 'status_update.status'));
+    }
+
+    public function test_checkout_requires_saved_address_then_creates_order_with_delivery_details(): void
+    {
+        $counter = 0;
+
+        config([
+            'services.whatsapp.token' => 'test-token',
+            'services.whatsapp.base_url' => 'https://graph.facebook.com/v20.0',
+        ]);
+
+        Http::fake(function () use (&$counter) {
+            $counter++;
+
+            return Http::response([
+                'messages' => [
+                    ['id' => 'wamid.outbound.'.$counter],
+                ],
+            ], 200);
+        });
+
+        $tenant = Tenant::factory()->create();
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => '1234567890',
+            'slug' => 'chat-store',
+            'whatsapp_brand_name' => 'AlphaHarvest Store',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'slug' => 'wellness',
+        ]);
+
+        $product = Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Morning Lift Coffee',
+            'slug' => 'morning-lift-coffee',
+            'sku' => 'COF-250',
+            'price' => 18.50,
+            'inventory_quantity' => 10,
+        ]);
+
+        $addPayload = [
+            'entry' => [[
+                'id' => 'entry-add',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.add',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'add_to_cart:'.$product->id,
+                                    'title' => 'Add to Cart',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $checkoutPayload = [
+            'entry' => [[
+                'id' => 'entry-checkout',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.checkout',
+                            'from' => '15551234567',
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'button_reply',
+                                'button_reply' => [
+                                    'id' => 'checkout',
+                                    'title' => 'Checkout',
+                                ],
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $addressPayload = [
+            'entry' => [[
+                'id' => 'entry-address',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'metadata' => [
+                            'phone_number_id' => '1234567890',
+                        ],
+                        'contacts' => [[
+                            'profile' => [
+                                'name' => 'Riya Sharma',
+                            ],
+                        ]],
+                        'messages' => [[
+                            'id' => 'wamid.inbound.address',
+                            'from' => '15551234567',
+                            'type' => 'text',
+                            'text' => [
+                                'body' => "700001\n221B Market Road\nKolkata",
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/whatsapp/webhook', $addPayload)->assertOk();
+        $this->postJson('/api/whatsapp/webhook', $checkoutPayload)->assertOk();
+
+        $this->assertDatabaseHas('messages', [
+            'direction' => 'outbound',
+            'body' => "AlphaHarvest Store\nSave delivery details before checkout.\n\nSend your delivery details in this format:\n\n700001\n221B Market Road\nKolkata, West Bengal\nPincode on line 1, address below.",
+        ]);
+
+        $this->postJson('/api/whatsapp/webhook', $addressPayload)->assertOk();
+
+        $checkoutPayload['entry'][0]['changes'][0]['value']['messages'][0]['id'] = 'wamid.inbound.checkout-2';
+
+        $this->postJson('/api/whatsapp/webhook', $checkoutPayload)->assertOk();
+
+        $this->assertDatabaseHas('customers', [
+            'phone' => '15551234567',
+        ]);
+
+        $customer = \App\Models\Customer::query()->where('phone', '15551234567')->firstOrFail();
+
+        $this->assertSame('700001', data_get($customer->metadata, 'delivery.pincode'));
+        $this->assertSame("221B Market Road\nKolkata", data_get($customer->metadata, 'delivery.address'));
+
+        $order = \App\Models\Order::query()->latest('id')->firstOrFail();
+
+        $this->assertSame('700001', data_get($order->metadata, 'delivery.pincode'));
+        $this->assertSame("221B Market Road\nKolkata", data_get($order->metadata, 'delivery.address'));
+        $this->assertSame('unpaid', $order->payment_status);
     }
 }
