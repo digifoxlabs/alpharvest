@@ -177,7 +177,19 @@ class ChatbotEngineService
 
     protected function storefrontMessages(Store $store): array
     {
-        if ($this->storeEngine->canSendWhatsAppCatalog($store)) {
+        $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
+
+        if ($catalogReadiness['ready'] && $catalogReadiness['checks']['mapped_products']) {
+            return [[
+                'kind' => 'product_list',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $this->storeEngine->storeIntroText($store),
+                'sections' => $this->storeEngine->whatsappCatalogSections($store),
+                'footer' => 'Browse products and add them from WhatsApp.',
+            ]];
+        }
+
+        if ($catalogReadiness['ready']) {
             return [[
                 'kind' => 'catalog_message',
                 'body' => $this->storeEngine->storeIntroText($store),

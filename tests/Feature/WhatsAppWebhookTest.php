@@ -92,7 +92,7 @@ class WhatsAppWebhookTest extends TestCase
         ]);
     }
 
-    public function test_visit_store_uses_native_catalog_message_when_configured(): void
+    public function test_visit_store_uses_multi_product_catalog_message_when_catalog_mapping_is_configured(): void
     {
         $counter = 0;
 
@@ -172,9 +172,16 @@ class WhatsAppWebhookTest extends TestCase
         $this->postJson('/api/whatsapp/webhook', $visitStorePayload)->assertOk();
 
         Http::assertSent(function (Request $request) {
-            return ($request->data()['interactive']['type'] ?? null) === 'catalog_message'
-                && ($request->data()['interactive']['action']['name'] ?? null) === 'catalog_message'
+            $sections = $request->data()['interactive']['action']['sections'] ?? [];
+            $retailerIds = collect($sections)
+                ->flatMap(fn (array $section) => $section['product_items'] ?? [])
+                ->pluck('product_retailer_id')
+                ->all();
+
+            return ($request->data()['interactive']['type'] ?? null) === 'product_list'
+                && ($request->data()['interactive']['action']['catalog_id'] ?? null) === '5566778899'
                 && str_contains($request->data()['interactive']['body']['text'] ?? '', 'Browse our featured wellness products below.')
+                && in_array('catalog-COF-250', $retailerIds, true)
                 && ($request->data()['recipient_type'] ?? null) === 'individual';
         });
     }
@@ -214,6 +221,7 @@ class WhatsAppWebhookTest extends TestCase
             'name' => 'Catalog Ready Product',
             'slug' => 'catalog-ready-product',
             'sku' => 'CAT-001',
+            'meta_retailer_id' => null,
         ]);
 
         $visitStorePayload = [
