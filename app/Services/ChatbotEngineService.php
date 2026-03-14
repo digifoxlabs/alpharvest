@@ -87,7 +87,7 @@ class ChatbotEngineService
                     ['id' => 'visit_store', 'title' => 'Visit Store'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
-                'footer' => 'Full in-chat payments require a Meta-supported payments setup. This build currently sends a secure pay link.',
+                'footer' => 'Tap Pay Now to continue.',
             ]];
         }
 
@@ -304,13 +304,13 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $order->order_number,
-            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nUse Pay Now for the secure payment step.",
+            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nPayment link: {$payment->payment_url}\nUse Pay Now for the secure payment step.",
             'buttons' => [
                 ['id' => 'pay_now', 'title' => 'Pay Now'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => "Payment link ready: {$payment->payment_url}",
+            'footer' => 'Payment link ready.',
         ]];
     }
 }
