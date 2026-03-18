@@ -735,9 +735,9 @@ class ChatbotEngineService
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => "Please enter a valid 6-digit pincode.",
-                // 'buttons' => [
-                //     ['id' => 'contact', 'title' => 'Contact'],
-                // ],
+                'buttons' => [
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
             ]];
         }
 
@@ -748,9 +748,9 @@ class ChatbotEngineService
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => $this->storeEngine->undeliverableMessage($store, $pincode),
-                // 'buttons' => [
-                //     ['id' => 'contact', 'title' => 'Contact'],
-                // ],
+                'buttons' => [
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
             ]];
         }
 
