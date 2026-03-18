@@ -286,14 +286,15 @@ class ChatbotEngineService
 
     protected function promptForPincode(Store $store, Conversation $conversation): array
     {
-        // $this->setConversationContext($conversation, [
-        //     'awaiting_pincode' => true,
-        // ]);
+        $this->setConversationContext($conversation, [
+            'awaiting_pincode' => true,
+        ]);
 
         return [
             'kind' => 'text',
             //'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => ($store->whatsapp_brand_name ?: $store->name) . "\n\n" . "Welcome 👋\n\nPlease enter your delivery pincode to continue.",
+            'body' => '*' . ($store->whatsapp_brand_name ?: $store->name) . "*\n\n" .
+                     "Welcome 👋\n\nPlease enter your delivery pincode to continue.",
             // 'buttons' => [
             //     ['id' => 'contact', 'title' => 'Contact'],
             // ],
