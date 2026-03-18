@@ -307,16 +307,25 @@ class ChatbotEngineService
 
     protected function storefrontMessages(Store $store, Customer $customer, Conversation $conversation): array
     {
-        $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
+       
+     $pincode = $customer->pincode; // ✅ get stored pincode
+         $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
 
         if ($catalogReadiness['ready']) {
             $this->setConversationContext($conversation, [
                 'catalog_sync_pending' => true,
             ]);
 
-            return [[
+            return [
+                
+            [
+                'kind' => 'text',
+                'body' => "*Delivering to:* {$pincode} 🚚",
+            ],
+            
+            [
                 'kind' => 'catalog_message',
-                'body' => $this->storeEngine->storeIntroText($store),
+                'body' => $this->storeEngine->storeIntroText($store, $pincode),
                 'footer' => 'Open the full store inside WhatsApp.',
             ]];
         }
@@ -325,7 +334,7 @@ class ChatbotEngineService
             'catalog_sync_pending' => false,
         ]);
 
-        return $this->fallbackStorefrontMessages($store);
+        return $this->fallbackStorefrontMessages($store, $pincode);
     }
 
     public function fallbackStorefrontMessages(Store $store): array
