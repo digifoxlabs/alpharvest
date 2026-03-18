@@ -701,7 +701,6 @@ class ChatbotEngineService
             'body' => "Address confirmed.\n" . $this->storeEngine->deliverySummary($customer) . "\nOur store team will send your payment link shortly.",
             'buttons' => [
                 ['id' => 'my_orders', 'title' => 'My Orders'],
-                ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
             'footer' => 'Saved address linked to this order.',
