@@ -201,6 +201,7 @@ class ChatbotEngineService
 
         if (Str::startsWith($command, 'add_to_cart:')) {
             $this->setConversationContext($conversation, [
+                'awaiting_pincode' => false,
                 'catalog_sync_pending' => false,
             ]);
 
@@ -735,9 +736,9 @@ class ChatbotEngineService
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => "Please enter a valid 6-digit pincode.",
-                'buttons' => [
-                    ['id' => 'contact', 'title' => 'Contact'],
-                ],
+                // 'buttons' => [
+                //     ['id' => 'contact', 'title' => 'Contact'],
+                // ],
             ]];
         }
 
