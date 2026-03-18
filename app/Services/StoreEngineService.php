@@ -25,7 +25,7 @@ class StoreEngineService
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->with([
-                'products' => fn ($query) => $query
+                'products' => fn($query) => $query
                     ->where('is_active', true)
                     ->orderBy('name'),
             ])
@@ -51,7 +51,7 @@ class StoreEngineService
                     'name' => $category->name,
                     'slug' => $category->slug,
                     'description' => $category->description,
-                    'products' => $category->products->map(fn (Product $product) => [
+                    'products' => $category->products->map(fn(Product $product) => [
                         'id' => $product->id,
                         'name' => $product->name,
                         'slug' => $product->slug,
@@ -84,7 +84,7 @@ class StoreEngineService
         ];
 
         foreach ($this->featuredProducts($store, 6) as $product) {
-            $lines[] = "{$product->sku} | {$product->name} | ".MoneyFormatter::format($product->price, $store->currency);
+            $lines[] = "{$product->sku} | {$product->name} | " . MoneyFormatter::format($product->price, $store->currency);
         }
 
         return implode("\n", $lines);
@@ -114,8 +114,8 @@ class StoreEngineService
     {
         $lines = [
             'Store contact details:',
-            'Email: '.($store->contact_email ?: 'Not configured'),
-            'Phone: '.($store->contact_phone ?: $store->support_phone ?: 'Not configured'),
+            'Email: ' . ($store->contact_email ?: 'Not configured'),
+            'Phone: ' . ($store->contact_phone ?: $store->support_phone ?: 'Not configured'),
         ];
 
         if ($store->whatsapp_contact_text) {
@@ -174,7 +174,7 @@ class StoreEngineService
                 ];
             })
             ->filter()
-            ->sortByDesc(fn (array $entry) => $entry['saved_at'] ?? '')
+            ->sortByDesc(fn(array $entry) => $entry['saved_at'] ?? '')
             ->values()
             ->all();
     }
@@ -182,7 +182,7 @@ class StoreEngineService
     public function findSavedAddress(Customer $customer, string $addressId): ?array
     {
         return collect($this->customerAddressBook($customer))
-            ->first(fn (array $entry) => $entry['id'] === $addressId);
+            ->first(fn(array $entry) => $entry['id'] === $addressId);
     }
 
     public function saveDeliveryAddress(Customer $customer, string $pincode, string $city, string $address): Customer
@@ -210,7 +210,7 @@ class StoreEngineService
         ];
 
         $addressBook = $existing
-            ->reject(fn (array $entry) => $entry['id'] === $current['id'])
+            ->reject(fn(array $entry) => $entry['id'] === $current['id'])
             ->prepend($current)
             ->take(9)
             ->values()
@@ -402,13 +402,13 @@ class StoreEngineService
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->with([
-                'products' => fn ($query) => $query
+                'products' => fn($query) => $query
                     ->where('is_active', true)
                     ->whereNotNull('meta_retailer_id')
                     ->orderBy('name'),
             ])
             ->get()
-            ->filter(fn (ProductCategory $category) => $category->products->isNotEmpty())
+            ->filter(fn(ProductCategory $category) => $category->products->isNotEmpty())
             ->values();
 
         $categorySections = $categories->take(max(min($maxSections - 1, 3), 0))->map(function (ProductCategory $category) use ($maxItemsPerSection) {
@@ -416,7 +416,7 @@ class StoreEngineService
                 'title' => Str::limit($category->name, 24, ''),
                 'product_items' => $category->products
                     ->take($maxItemsPerSection)
-                    ->map(fn (Product $product) => [
+                    ->map(fn(Product $product) => [
                         'product_retailer_id' => $product->meta_retailer_id,
                     ])
                     ->values()
@@ -436,7 +436,7 @@ class StoreEngineService
         if ($allProducts->isNotEmpty() && $sections->count() < $maxSections) {
             $sections->push([
                 'title' => 'See All',
-                'product_items' => $allProducts->map(fn (Product $product) => [
+                'product_items' => $allProducts->map(fn(Product $product) => [
                     'product_retailer_id' => $product->meta_retailer_id,
                 ])->values()->all(),
             ]);
@@ -454,7 +454,7 @@ class StoreEngineService
 
         return [[
             'title' => Str::limit($store->name, 24, ''),
-            'product_items' => $allProducts->map(fn (Product $product) => [
+            'product_items' => $allProducts->map(fn(Product $product) => [
                 'product_retailer_id' => $product->meta_retailer_id,
             ])->values()->all(),
         ]];
@@ -466,12 +466,12 @@ class StoreEngineService
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->with([
-                'products' => fn ($query) => $query
+                'products' => fn($query) => $query
                     ->where('is_active', true)
                     ->orderBy('name'),
             ])
             ->get()
-            ->filter(fn (ProductCategory $category) => $category->products->isNotEmpty())
+            ->filter(fn(ProductCategory $category) => $category->products->isNotEmpty())
             ->take($maxSections);
 
         $sections = $categories->map(function (ProductCategory $category) use ($store, $maxRowsPerSection) {
@@ -479,10 +479,10 @@ class StoreEngineService
                 'title' => Str::limit($category->name, 24, ''),
                 'rows' => $category->products
                     ->take($maxRowsPerSection)
-                    ->map(fn (Product $product) => [
-                        'id' => 'add_to_cart:'.$product->id,
+                    ->map(fn(Product $product) => [
+                        'id' => 'add_to_cart:' . $product->id,
                         'title' => Str::limit($product->name, 24, ''),
-                        'description' => Str::limit($product->sku.' | '.MoneyFormatter::format($product->price, $store->currency), 72, ''),
+                        'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->price, $store->currency), 72, ''),
                     ])
                     ->values()
                     ->all(),
@@ -505,10 +505,10 @@ class StoreEngineService
 
         return [[
             'title' => Str::limit($store->name, 24, ''),
-            'rows' => $products->map(fn (Product $product) => [
-                'id' => 'add_to_cart:'.$product->id,
+            'rows' => $products->map(fn(Product $product) => [
+                'id' => 'add_to_cart:' . $product->id,
                 'title' => Str::limit($product->name, 24, ''),
-                'description' => Str::limit($product->sku.' | '.MoneyFormatter::format($product->price, $store->currency), 72, ''),
+                'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->price, $store->currency), 72, ''),
             ])->values()->all(),
         ]];
     }
@@ -522,7 +522,7 @@ class StoreEngineService
             ->where(function ($query) use ($normalized) {
                 $query->whereRaw('LOWER(sku) = ?', [$normalized])
                     ->orWhereRaw('LOWER(slug) = ?', [$normalized])
-                    ->orWhereRaw('LOWER(name) like ?', ['%'.$normalized.'%']);
+                    ->orWhereRaw('LOWER(name) like ?', ['%' . $normalized . '%']);
             })
             ->orderBy('name')
             ->first();
@@ -713,11 +713,11 @@ class StoreEngineService
         $lines = ['Your cart:'];
 
         foreach ($cart->items as $item) {
-            $lines[] = "{$item->quantity} x {$item->product->name} ({$item->product->sku}) = ".MoneyFormatter::format($item->total_price, $store->currency);
+            $lines[] = "{$item->quantity} x {$item->product->name} ({$item->product->sku}) = " . MoneyFormatter::format($item->total_price, $store->currency);
         }
 
         $lines[] = '';
-        $lines[] = 'Total: '.MoneyFormatter::format($cart->total, $store->currency);
+        $lines[] = 'Total: ' . MoneyFormatter::format($cart->total, $store->currency);
         $lines[] = $this->deliverySummary($customer);
         $lines[] = 'Choose Checkout when you are ready.';
 
@@ -788,7 +788,7 @@ class StoreEngineService
             'catalog' => array_filter([
                 'catalog_id' => Arr::get($catalogOrder, 'catalog_id'),
                 'item_count' => count(Arr::get($catalogOrder, 'product_items', [])),
-            ], fn ($value) => $value !== null && $value !== ''),
+            ], fn($value) => $value !== null && $value !== ''),
             'admin_follow_up' => array_merge(data_get($order->metadata, 'admin_follow_up', []), [
                 'address_requested_at' => data_get($order->metadata, 'admin_follow_up.address_requested_at'),
                 'payment_link_sent_at' => data_get($order->metadata, 'admin_follow_up.payment_link_sent_at'),
@@ -875,16 +875,16 @@ class StoreEngineService
 
             $lines = [
                 "Current order: {$order->order_number}",
-                'Status: '.ucfirst(str_replace('_', ' ', $order->status)),
-                'Payment: '.ucfirst(str_replace('_', ' ', $order->payment_status)),
-                'Amount: '.MoneyFormatter::format($order->total, $order->currency),
+                'Status: ' . ucfirst(str_replace('_', ' ', $order->status)),
+                'Payment: ' . ucfirst(str_replace('_', ' ', $order->payment_status)),
+                'Amount: ' . MoneyFormatter::format($order->total, $order->currency),
             ];
 
             if ($order->items->isNotEmpty()) {
                 $lines[] = '';
 
                 foreach ($order->items as $item) {
-                    $lines[] = "{$item->quantity} x {$item->product_name} = ".MoneyFormatter::format($item->total_price, $order->currency);
+                    $lines[] = "{$item->quantity} x {$item->product_name} = " . MoneyFormatter::format($item->total_price, $order->currency);
                 }
             }
 
@@ -892,9 +892,9 @@ class StoreEngineService
 
             if (data_get($delivery, 'pincode') || data_get($delivery, 'address')) {
                 $lines[] = '';
-                $lines[] = 'Deliver to pincode: '.(data_get($delivery, 'pincode') ?: 'Not saved');
-                $lines[] = 'City: '.(data_get($delivery, 'city') ?: 'Not saved');
-                $lines[] = 'Address: '.(data_get($delivery, 'address') ?: 'Not saved');
+                $lines[] = 'Deliver to pincode: ' . (data_get($delivery, 'pincode') ?: 'Not saved');
+                $lines[] = 'City: ' . (data_get($delivery, 'city') ?: 'Not saved');
+                $lines[] = 'Address: ' . (data_get($delivery, 'address') ?: 'Not saved');
             }
 
             return implode("\n", $lines);
@@ -909,19 +909,19 @@ class StoreEngineService
             ->where('store_id', $store->id)
             ->count() + 1;
 
-        return strtoupper($store->slug).'-'.str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+        return strtoupper($store->slug) . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
 
 
     public function hasCustomerPincode(Customer $customer): bool
-{
-    return !empty($customer->pincode);
-}
+    {
+        return !empty($customer->pincode);
+    }
 
-public function saveCustomerPincode(Customer $customer, string $pincode): void
-{
-    $customer->update([
-        'pincode' => $pincode,
-    ]);
-}
+    public function saveCustomerPincode(Customer $customer, string $pincode): void
+    {
+        $customer->update([
+            'pincode' => $pincode,
+        ]);
+    }
 }

@@ -43,9 +43,9 @@ class ChatbotEngineService
             // return [$this->mainMenuMessage($store)];
 
             // If already has pincode → go directly to catalog
-            if ($this->storeEngine->hasCustomerPincode($customer)) {
-                return $this->storefrontMessages($store, $customer, $conversation);
-            }
+            // if ($this->storeEngine->hasCustomerPincode($customer)) {
+            //     return $this->storefrontMessages($store, $customer, $conversation);
+            // }
 
             return [$this->promptForPincode($store, $conversation)];
         }
