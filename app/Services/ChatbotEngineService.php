@@ -291,7 +291,7 @@ class ChatbotEngineService
         // ]);
 
         return [
-            'kind' => 'buttons',
+            'kind' => 'text',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => "Welcome 👋\n\nPlease enter your delivery pincode to continue.",
             // 'buttons' => [
