@@ -64,9 +64,11 @@ class ChatbotEngineService
 
         if ($command === 'contact') {
             return [[
-                'kind' => 'buttons',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => $this->storeEngine->contactText($store),
+                'kind' => 'text',
+                // 'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                // 'body' => $this->storeEngine->contactText($store),
+                'body' => '*' . ($store->whatsapp_brand_name ?: $store->name) . "*\n\n" .
+                                $this->storeEngine->contactText($store),
                 // 'buttons' => $this->mainMenuButtons(),
                 // 'footer' => 'Need anything else?',
             ]];
