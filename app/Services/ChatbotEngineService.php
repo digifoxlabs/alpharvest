@@ -62,6 +62,11 @@ class ChatbotEngineService
             return $this->orderMessages($store, $customer, $conversation);
         }
 
+        if ($command === 'change_pincode') {
+             return [$this->promptForPincode($store, $conversation)];
+        }
+
+
         if ($command === 'contact') {
             return [[
                 'kind' => 'text',
@@ -79,11 +84,30 @@ class ChatbotEngineService
         }
 
         if ($command === 'catalog_order_received') {
+
+
+        $pincode = $customer->pincode;
+
+        if (! $pincode || ! $this->storeEngine->isDeliverable($store, $pincode)) {
+
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "*Delivery not available*\n\nWe currently do not deliver to pincode {$pincode}.\n\nPlease update your location to continue.",
+                'buttons' => [
+                    ['id' => 'change_pincode', 'title' => 'Change Pincode'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Location required to proceed.',
+            ]];
+        }
+
+        
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->latestOrder($store, $customer);
 
             $responses = [[
-                'kind' => 'buttons',
+                // 'kind' => 'text',
                 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
                     $order ? 'Your order has been placed successfully.' : 'Your order has been placed.',
