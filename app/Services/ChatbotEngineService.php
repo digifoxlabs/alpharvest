@@ -285,9 +285,9 @@ class ChatbotEngineService
 
     protected function promptForPincode(Store $store, Conversation $conversation): array
     {
-        $this->setConversationContext($conversation, [
-            'awaiting_pincode' => true,
-        ]);
+        // $this->setConversationContext($conversation, [
+        //     'awaiting_pincode' => true,
+        // ]);
 
         return [
             'kind' => 'buttons',
