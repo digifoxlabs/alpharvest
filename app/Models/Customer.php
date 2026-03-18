@@ -19,6 +19,7 @@ class Customer extends Model
         'preferred_language',
         'last_message_at',
         'metadata',
+        'pincode'
     ];
 
     protected $casts = [
