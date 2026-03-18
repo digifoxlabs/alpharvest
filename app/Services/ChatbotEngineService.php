@@ -748,6 +748,11 @@ class ChatbotEngineService
         // ✅ Check delivery (PINCODE ONLY)
         if (! $this->storeEngine->isDeliverable($store, $pincode)) {
 
+            // ✅ Clear state
+            $this->setConversationContext($conversation, [
+                'awaiting_pincode' => false,
+            ]);
+
             return [[
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
