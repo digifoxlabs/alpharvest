@@ -15,8 +15,7 @@ class ChatbotEngineService
     public function __construct(
         protected StoreEngineService $storeEngine,
         protected PaymentLinkService $paymentLinks,
-    ) {
-    }
+    ) {}
 
     public function reply(
         Store $store,
@@ -28,6 +27,10 @@ class ChatbotEngineService
         $command = $this->normalizeCommand($incomingCommand ?: $incomingText);
         $text = Str::of($incomingText)->trim()->lower()->squish()->toString();
 
+        if ($this->isAwaitingPincode($conversation) && ! $incomingCommand) {
+            return $this->capturePincode($store, $customer, $conversation, $incomingText);
+        }
+
         if ($this->isAwaitingAddress($conversation) && ! $incomingCommand) {
             return $this->captureAddress($store, $customer, $conversation, $incomingText);
         }
@@ -37,7 +40,14 @@ class ChatbotEngineService
         }
 
         if ($this->isGreeting($command, $text)) {
-            return [$this->mainMenuMessage($store)];
+            // return [$this->mainMenuMessage($store)];
+
+            // If already has pincode → go directly to catalog
+            if ($this->storeEngine->hasCustomerPincode($customer)) {
+                return $this->storefrontMessages($store, $customer, $conversation);
+            }
+
+            return [$this->promptForPincode($store, $conversation)];
         }
 
         if (in_array($command, ['visit_store', 'menu', 'browse', 'products', 'storefront'], true)) {
@@ -75,14 +85,14 @@ class ChatbotEngineService
                 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
                     $order ? 'Your order has been placed successfully.' : 'Your order has been placed.',
-                    $order ? 'Total: '.MoneyFormatter::format($order->total, $order->currency) : null,
+                    $order ? 'Total: ' . MoneyFormatter::format($order->total, $order->currency) : null,
                     'Please confirm the delivery address for this order.',
                 ]))),
-                'buttons' => [
-                    ['id' => 'my_orders', 'title' => 'My Orders'],
-                    ['id' => 'visit_store', 'title' => 'Visit Store'],
-                    ['id' => 'contact', 'title' => 'Contact'],
-                ],
+                // 'buttons' => [
+                //     ['id' => 'my_orders', 'title' => 'My Orders'],
+                //     ['id' => 'visit_store', 'title' => 'Visit Store'],
+                //     ['id' => 'contact', 'title' => 'Contact'],
+                // ],
                 'footer' => 'Order received in WhatsApp.',
             ]];
 
@@ -179,7 +189,7 @@ class ChatbotEngineService
             return [[
                 'kind' => 'buttons',
                 'header_text' => $order->order_number,
-                'body' => "Your order is ready for payment.\nAmount due: ".MoneyFormatter::format($order->total, $order->currency)."\nSecure payment link: {$payment->payment_url}",
+                'body' => "Your order is ready for payment.\nAmount due: " . MoneyFormatter::format($order->total, $order->currency) . "\nSecure payment link: {$payment->payment_url}",
                 'buttons' => [
                     ['id' => 'my_orders', 'title' => 'My Orders'],
                     ['id' => 'visit_store', 'title' => 'Visit Store'],
@@ -272,6 +282,25 @@ class ChatbotEngineService
         ];
     }
 
+
+    protected function promptForPincode(Store $store, Conversation $conversation): array
+    {
+        $this->setConversationContext($conversation, [
+            'awaiting_pincode' => true,
+        ]);
+
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => "Welcome 👋\n\nPlease enter your delivery pincode to continue.",
+            'buttons' => [
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => '6-digit pincode required',
+        ];
+    }
+
+
     protected function storefrontMessages(Store $store, Customer $customer, Conversation $conversation): array
     {
         $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
@@ -286,9 +315,6 @@ class ChatbotEngineService
                 'body' => $this->storeEngine->storeIntroText($store),
                 'footer' => 'Open the full store inside WhatsApp.',
             ]];
-
-
-            
         }
 
         $this->setConversationContext($conversation, [
@@ -300,7 +326,7 @@ class ChatbotEngineService
 
     public function fallbackStorefrontMessages(Store $store): array
     {
-        // $messages = [];
+        $messages = [];
 
         // if ($store->whatsapp_store_image_url) {
         //     $messages[] = [
@@ -333,10 +359,10 @@ class ChatbotEngineService
 
     protected function productCardMessage(Store $store, Product $product): array
     {
-        $body = "{$product->name}\n".MoneyFormatter::format($product->price, $store->currency);
+        $body = "{$product->name}\n" . MoneyFormatter::format($product->price, $store->currency);
 
         if ($product->description) {
-            $body .= "\n".Str::limit($product->description, 90);
+            $body .= "\n" . Str::limit($product->description, 90);
         }
 
         $message = [
@@ -344,7 +370,7 @@ class ChatbotEngineService
             'header_text' => $product->sku,
             'body' => $body,
             'buttons' => [
-                ['id' => 'add_to_cart:'.$product->id, 'title' => 'Add to Cart'],
+                ['id' => 'add_to_cart:' . $product->id, 'title' => 'Add to Cart'],
                 ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
@@ -380,7 +406,7 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $product->name,
-            'body' => "Added to cart.\nQty for this item: {$item->quantity}\nCart items: {$cart->items->sum('quantity')}\nCart total: ".MoneyFormatter::format($cart->total, $store->currency),
+            'body' => "Added to cart.\nQty for this item: {$item->quantity}\nCart items: {$cart->items->sum('quantity')}\nCart total: " . MoneyFormatter::format($cart->total, $store->currency),
             'buttons' => [
                 ['id' => 'visit_store', 'title' => 'Browse More'],
                 ['id' => 'view_cart', 'title' => 'View Cart'],
@@ -426,7 +452,7 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $order->order_number,
-            'body' => "Order created successfully.\nTotal: ".MoneyFormatter::format($order->total, $order->currency)."\nOur store team will message you for address and payment.",
+            'body' => "Order created successfully.\nTotal: " . MoneyFormatter::format($order->total, $order->currency) . "\nOur store team will message you for address and payment.",
             'buttons' => [
                 ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
@@ -442,8 +468,7 @@ class ChatbotEngineService
         ?string $prefix = null,
         ?int $orderId = null,
         bool $createOrderAfterSave = false
-    ): array
-    {
+    ): array {
         $context = [
             'awaiting_address' => true,
             'address_choice_map' => null,
@@ -462,13 +487,13 @@ class ChatbotEngineService
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
                 'Send your delivery details in this format:',
-                "700001\nKolkata\n221B Market Road\nNear Central Metro",
+                "781001\nGuwahati\nHno 01, Panbazar\nNear Cotton University",
             ]))),
-            'buttons' => [
-                ['id' => 'view_cart', 'title' => 'View Cart'],
-                ['id' => 'visit_store', 'title' => 'Visit Store'],
-                ['id' => 'contact', 'title' => 'Contact'],
-            ],
+            // 'buttons' => [
+            //     ['id' => 'view_cart', 'title' => 'View Cart'],
+            //     ['id' => 'visit_store', 'title' => 'Visit Store'],
+            //     ['id' => 'contact', 'title' => 'Contact'],
+            // ],
             'footer' => 'Pincode line 1, city line 2.',
         ];
     }
@@ -597,8 +622,8 @@ class ChatbotEngineService
             $number = (string) ($index + 1);
             $choiceMap[$number] = $address['id'];
             $rows[] = [
-                'id' => 'select_address:'.$address['id'],
-                'title' => Str::limit($number.'. '.$address['pincode'].' '.$address['city'], 24, ''),
+                'id' => 'select_address:' . $address['id'],
+                'title' => Str::limit($number . '. ' . $address['pincode'] . ' ' . $address['city'], 24, ''),
                 'description' => Str::limit($address['address'], 72, ''),
             ];
         }
@@ -669,7 +694,7 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Address confirmed.\n".$this->storeEngine->deliverySummary($customer)."\nOur store team will send your payment link shortly.",
+            'body' => "Address confirmed.\n" . $this->storeEngine->deliverySummary($customer) . "\nOur store team will send your payment link shortly.",
             'buttons' => [
                 ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
@@ -692,5 +717,58 @@ class ChatbotEngineService
             ],
             'footer' => 'Outside delivery area.',
         ];
+    }
+
+
+    protected function capturePincode(
+        Store $store,
+        Customer $customer,
+        Conversation $conversation,
+        string $incomingText
+    ): array {
+
+        $pincode = trim($incomingText);
+
+        // ✅ Validate format
+        if (! preg_match('/^\d{6}$/', $pincode)) {
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "Invalid pincode.\nPlease enter a valid 6-digit pincode.",
+                'buttons' => [
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+            ]];
+        }
+
+        // ✅ Check delivery (PINCODE ONLY)
+        if (! $this->storeEngine->isDeliverable($store, $pincode)) {
+
+            return [[
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => $this->storeEngine->undeliverableMessage($store, $pincode),
+                'buttons' => [
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+            ]];
+        }
+
+        // ✅ Save pincode
+        $this->storeEngine->saveCustomerPincode($customer, $pincode);
+
+        // ✅ Clear state
+        $this->setConversationContext($conversation, [
+            'awaiting_pincode' => false,
+        ]);
+
+        // 🚀 IMPORTANT: directly open catalog
+        return $this->storefrontMessages($store, $customer, $conversation);
+    }
+
+
+    protected function isAwaitingPincode(Conversation $conversation): bool
+    {
+        return (bool) data_get($conversation->context, 'awaiting_pincode', false);
     }
 }

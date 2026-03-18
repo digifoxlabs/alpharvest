@@ -269,7 +269,7 @@ class StoreEngineService
             ->all();
     }
 
-    public function isDeliverable(Store $store, string $pincode, string $city): bool
+    public function isDeliverable(Store $store, string $pincode, ?string $city = null): bool
     {
         $zones = $this->deliveryZones($store);
 
@@ -277,13 +277,38 @@ class StoreEngineService
             return true;
         }
 
+        // return collect($zones)->contains(function (array $zone) use ($pincode, $city) {
+        //     return $zone['pincode'] === trim($pincode)
+        //         && Str::lower($zone['city']) === Str::lower(trim($city));
+        // });
+        $pincode = trim($pincode);
+        $city = $city !== null ? Str::lower(trim($city)) : null;
+
         return collect($zones)->contains(function (array $zone) use ($pincode, $city) {
-            return $zone['pincode'] === trim($pincode)
-                && Str::lower($zone['city']) === Str::lower(trim($city));
+
+            // If city is provided → STRICT match
+            if ($city !== null) {
+                return $zone['pincode'] === $pincode
+                    && Str::lower($zone['city']) === $city;
+            }
+
+            // If only pincode → match only pincode
+            return $zone['pincode'] === $pincode;
         });
     }
 
-    public function undeliverableMessage(Store $store, string $pincode, string $city): string
+    // public function undeliverableMessage(Store $store, string $pincode, string $city): string
+    // {
+    //     $configured = trim((string) data_get($store->settings, 'undeliverable_message', ''));
+
+    //     if ($configured !== '') {
+    //         return $configured;
+    //     }
+
+    //     return "We do not currently deliver to {$city} {$pincode}.\nPlease choose another address or contact the store team.";
+    // }
+
+    public function undeliverableMessage(Store $store, string $pincode, ?string $city = null): string
     {
         $configured = trim((string) data_get($store->settings, 'undeliverable_message', ''));
 
@@ -291,7 +316,13 @@ class StoreEngineService
             return $configured;
         }
 
-        return "We do not currently deliver to {$city} {$pincode}.\nPlease choose another address or contact the store team.";
+        // If city is available → show full message
+        if ($city !== null && trim($city) !== '') {
+            return "We do not currently deliver to {$city} {$pincode}.\nPlease choose another address or contact the store team.";
+        }
+
+        // If only pincode
+        return "We do not currently deliver to pincode {$pincode}.\nPlease try another pincode or contact the store team.";
     }
 
     public function featuredProducts(Store $store, int $limit = 4): Collection
@@ -880,4 +911,17 @@ class StoreEngineService
 
         return strtoupper($store->slug).'-'.str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
+
+
+    public function hasCustomerPincode(Customer $customer): bool
+{
+    return !empty($customer->pincode);
+}
+
+public function saveCustomerPincode(Customer $customer, string $pincode): void
+{
+    $customer->update([
+        'pincode' => $pincode,
+    ]);
+}
 }
