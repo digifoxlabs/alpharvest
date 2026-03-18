@@ -19,6 +19,7 @@ class CustomerFactory extends Factory
             'preferred_language' => 'en',
             'last_message_at' => now(),
             'metadata' => null,
+            'pincode' => fake()->numerify('######'),
         ];
     }
 }
