@@ -733,7 +733,7 @@ class ChatbotEngineService
         // ✅ Validate format
         if (! preg_match('/^\d{6}$/', $pincode)) {
             return [[
-                'kind' => 'buttons',
+                'kind' => 'text',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => "Please enter a valid 6-digit pincode.",
                 // 'buttons' => [
