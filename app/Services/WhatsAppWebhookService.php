@@ -75,11 +75,6 @@ class WhatsAppWebhookService
 
     protected function processInboundMessage(Store $store, array $message, array $value): void
     {
-        $from = Arr::get($message, 'from');
-
-        if (! $from) {
-            return;
-        }
 
 
         $messageId = Arr::get($message, 'id');
@@ -87,6 +82,16 @@ class WhatsAppWebhookService
         if ($messageId) {
         $this->cloudApi->markAsRead($store, $messageId);
         }
+
+
+        $from = Arr::get($message, 'from');
+
+        if (! $from) {
+            return;
+        }
+
+
+
 
         $customer = Customer::query()->updateOrCreate(
             [
