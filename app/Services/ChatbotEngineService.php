@@ -335,24 +335,24 @@ class ChatbotEngineService
      $pincode = $customer->pincode; // ✅ get stored pincode
          $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
 
-        if ($catalogReadiness['ready']) {
-            $this->setConversationContext($conversation, [
-                'catalog_sync_pending' => true,
-            ]);
+        // if ($catalogReadiness['ready']) {
+        //     $this->setConversationContext($conversation, [
+        //         'catalog_sync_pending' => true,
+        //     ]);
 
-            return [
+        //     return [
                 
-            [
-                'kind' => 'text',
-                'body' => "*Delivering to:* {$pincode} 🚚",
-            ],
+        //     [
+        //         'kind' => 'text',
+        //         'body' => "*Delivering to:* {$pincode} 🚚",
+        //     ],
             
-            [
-                'kind' => 'catalog_message',
-                'body' => $this->storeEngine->storeIntroText($store, $pincode),
-                'footer' => 'Open the full store inside WhatsApp.',
-            ]];
-        }
+        //     [
+        //         'kind' => 'catalog_message',
+        //         'body' => $this->storeEngine->storeIntroText($store, $pincode),
+        //         'footer' => 'Open the full store inside WhatsApp.',
+        //     ]];
+        // }
 
         $this->setConversationContext($conversation, [
             'catalog_sync_pending' => false,
