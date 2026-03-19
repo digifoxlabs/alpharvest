@@ -115,7 +115,7 @@ class ChatbotEngineService
                         : "Your order has been placed.",
 
                     $order
-                        ? "*Order No:* {$order->order_number}"
+                        ? "*{$order->order_number}*"
                         : null,
 
                     $order
@@ -739,12 +739,12 @@ class ChatbotEngineService
         return [[
             'kind' => 'buttons',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Address confirmed.\n" . $this->storeEngine->deliverySummary($customer) . "\nOur store team will send your payment link shortly.",
+            'body' => "Address confirmed.\n" . $this->storeEngine->deliverySummary($customer) . "\n\n Our store team will contact shortly.",
             'buttons' => [
                 ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => 'Saved address linked to this order.',
+            'footer' => 'Delivery Address Saved.',
         ]];
     }
 

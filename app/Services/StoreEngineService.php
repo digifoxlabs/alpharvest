@@ -150,7 +150,17 @@ class StoreEngineService
             return "Deliver to pincode: not saved yet.\nTap Save Address and send pincode on line 1, city on line 2, and the full address below.";
         }
 
-        return "Deliver to pincode: {$delivery['pincode']}\nCity: {$delivery['city']}\nAddress: {$delivery['address']}";
+        $parts = array_filter([
+            $delivery['address'] ?? null,
+            $delivery['city'] ?? null,
+            $delivery['pincode'] ?? null,
+        ]);
+
+        return $parts
+            ? 'Address: ' . implode(', ', $parts)
+            : 'Address: Not available';
+
+       // return "Deliver to pincode: {$delivery['pincode']}\nCity: {$delivery['city']}\nAddress: {$delivery['address']}";
     }
 
     public function customerAddressBook(Customer $customer): array
