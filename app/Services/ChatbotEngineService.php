@@ -786,6 +786,7 @@ class ChatbotEngineService
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 'body' => $this->storeEngine->undeliverableMessage($store, $pincode),
                 'buttons' => [
+                    ['id' => 'change_pincode', 'title' => 'Change Pincode'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
             ]];
