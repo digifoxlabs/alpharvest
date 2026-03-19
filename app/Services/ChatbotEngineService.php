@@ -517,11 +517,11 @@ class ChatbotEngineService
         $this->setConversationContext($conversation, $context);
 
         return [
-            'kind' => 'list',
+            'kind' => 'text',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
-                'Send your delivery details in the following format:\n\n',
+                '\n *Send your delivery details in the following format:*\n\n',
                 "1st Line-6 digit pincode\n 2nd Line - City \n 3rd Line- Full Address",
             ]))),
             // 'buttons' => [
