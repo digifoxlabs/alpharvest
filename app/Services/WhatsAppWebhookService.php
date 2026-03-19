@@ -81,6 +81,13 @@ class WhatsAppWebhookService
             return;
         }
 
+
+        $messageId = Arr::get($message, 'id');
+
+        if ($messageId) {
+        $this->cloudApi->markAsRead($store, $messageId);
+        }
+
         $customer = Customer::query()->updateOrCreate(
             [
                 'store_id' => $store->id,
