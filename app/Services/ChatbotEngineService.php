@@ -359,6 +359,7 @@ class ChatbotEngineService
                 [
                     'kind' => 'catalog_message',
                     'body' => $this->storeEngine->storeIntroText($store, $pincode),
+                    'thumbnail_product_retailer_id' => 'PIC-GCP',
                     'footer' => 'Type Help for more options',
                 ]
             ];
