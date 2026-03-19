@@ -107,12 +107,12 @@ class ChatbotEngineService
                 ?? $this->storeEngine->latestOrder($store, $customer);
 
             $responses = [[
-                // 'kind' => 'text',
-                'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
+                'kind' => 'text',
+               // 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
-                    $order ? 'Your order has been placed successfully.' : 'Your order has been placed.',
+                    $order ? ' *Your order has been placed successfully.= \n ' : 'Your order has been placed.',
                     $order ? 'Total: ' . MoneyFormatter::format($order->total, $order->currency) : null,
-                    'Please confirm the delivery address for this order.',
+                    '\n Please confirm the delivery address for this order.',
                 ]))),
                 // 'buttons' => [
                 //     ['id' => 'my_orders', 'title' => 'My Orders'],
@@ -132,7 +132,7 @@ class ChatbotEngineService
                 $responses[] = $this->promptForAddress(
                     $store,
                     $conversation,
-                    "Please share your delivery address for order {$order->order_number}.",
+                    "Please share your delivery address for {$order->order_number}.",
                     $order->id
                 );
 
@@ -676,13 +676,13 @@ class ChatbotEngineService
         return [
             'kind' => 'list',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Choose a saved delivery address for order {$order->order_number}, or select New Address.",
+            'body' => "Choose a saved delivery address for *{$order->order_number}* or select New Address.",
             'button_text' => 'Choose Address',
             'sections' => [[
                 'title' => 'Saved addresses',
                 'rows' => $rows,
             ]],
-            'footer' => 'Reply with 1, 2, 3 or tap an address.',
+            'footer' => 'Tap Choose Address',
         ];
     }
 

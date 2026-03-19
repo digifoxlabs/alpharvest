@@ -909,7 +909,8 @@ class StoreEngineService
             ->where('store_id', $store->id)
             ->count() + 1;
 
-        return strtoupper($store->slug) . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+        // return strtoupper($store->slug) . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+        return strtoupper('order.no') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
 
 
