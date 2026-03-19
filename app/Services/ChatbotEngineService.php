@@ -320,7 +320,7 @@ class ChatbotEngineService
             'kind' => 'text',
             //'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => '*' . ($store->whatsapp_brand_name ?: $store->name) . "*\n\n" .
-                     "Welcome 👋\n\nPlease enter your delivery pincode to continue.",
+                     "Welcome 👋\n\nPlease enter 6 digit delivery pincode to continue.",
             // 'buttons' => [
             //     ['id' => 'contact', 'title' => 'Contact'],
             // ],
