@@ -521,8 +521,7 @@ class ChatbotEngineService
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
-                '\n *Send your delivery details in the following format:*\n\n',
-                "1st Line-6 digit pincode\n 2nd Line - City \n 3rd Line- Full Address",
+                "\n *Send your delivery details in the following format:* \n\n 1st Line-6 digit pincode \n 2nd Line - City \n 3rd Line- Full Address",
             ]))),
             // 'buttons' => [
             //     ['id' => 'view_cart', 'title' => 'View Cart'],
@@ -554,8 +553,8 @@ class ChatbotEngineService
             ]];
         }
 
-        if (! $this->storeEngine->isDeliverable($store, $pincode, $city)) {
-            return [$this->undeliverableAreaMessage($store, $pincode, $city)];
+        if (! $this->storeEngine->isDeliverable($store, $pincode)) {
+            return [$this->undeliverableAreaMessage($store, $pincode)];
         }
 
         $customer = $this->storeEngine->saveDeliveryAddress($customer, $pincode, $city, $address);
@@ -705,7 +704,7 @@ class ChatbotEngineService
             ]];
         }
 
-        if (! $this->storeEngine->isDeliverable($store, $savedAddress['pincode'], $savedAddress['city'])) {
+        if (! $this->storeEngine->isDeliverable($store, $savedAddress['pincode'])) {
             return [$this->undeliverableAreaMessage($store, $savedAddress['pincode'], $savedAddress['city'])];
         }
 
@@ -737,7 +736,7 @@ class ChatbotEngineService
         ]];
     }
 
-    protected function undeliverableAreaMessage(Store $store, string $pincode, string $city): array
+    protected function undeliverableAreaMessage(Store $store, string $pincode, ?string $city = null): array
     {
         return [
             'kind' => 'buttons',
