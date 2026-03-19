@@ -359,7 +359,7 @@ class ChatbotEngineService
                 [
                     'kind' => 'catalog_message',
                     'body' => $this->storeEngine->storeIntroText($store, $pincode),
-                    'footer' => 'Open the full store inside WhatsApp.',
+                    'footer' => 'Type Help for more options',
                 ]
             ];
         }
@@ -598,10 +598,9 @@ class ChatbotEngineService
                 'Delivery details saved.',
                 $this->storeEngine->deliverySummary($customer),
                 $orderCreatedAfterSave && $order ? "Order created: {$order->order_number}" : null,
-                'Our store team will send your payment link shortly.',
+                'Our store team will contact you shortly.',
             ]))),
-            'buttons' => [
-                ['id' => 'my_orders', 'title' => 'My Orders'],
+            'buttons' => [               
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
