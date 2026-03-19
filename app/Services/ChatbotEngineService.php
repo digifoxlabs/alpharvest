@@ -517,12 +517,12 @@ class ChatbotEngineService
         $this->setConversationContext($conversation, $context);
 
         return [
-            'kind' => 'buttons',
+            'kind' => 'list',
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
-                'Send your delivery details in this format:',
-                "781001\nGuwahati\nHno 01, Panbazar\nNear Cotton University",
+                'Send your delivery details in the following format:\n\n',
+                "1st Line-6 digit pincode\n 2nd Line - City \n 3rd Line- Full Address",
             ]))),
             // 'buttons' => [
             //     ['id' => 'view_cart', 'title' => 'View Cart'],
@@ -545,13 +545,12 @@ class ChatbotEngineService
             return [[
                 'kind' => 'buttons',
                 'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => "That address format was not valid.\nSend a 6-digit pincode on the first line, city on the second line, then the full delivery address below it.",
+                'body' => "That address format was not valid.\n\n *Example:* \n\n 781001 \n Guwahati\n Hno 1, Panbazar, Guwahati",
                 'buttons' => [
                     ['id' => 'new_address', 'title' => 'Try Again'],
-                    ['id' => 'view_cart', 'title' => 'View Cart'],
                     ['id' => 'contact', 'title' => 'Contact'],
                 ],
-                'footer' => 'Example: 700001, Kolkata, address',
+                'footer' => 'Delivery Address',
             ]];
         }
 
