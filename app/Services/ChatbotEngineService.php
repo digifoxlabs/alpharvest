@@ -63,7 +63,7 @@ class ChatbotEngineService
         }
 
         if ($command === 'change_pincode') {
-             return [$this->promptForPincode($store, $conversation)];
+            return [$this->promptForPincode($store, $conversation)];
         }
 
 
@@ -73,7 +73,7 @@ class ChatbotEngineService
                 // 'header_text' => $store->whatsapp_brand_name ?: $store->name,
                 // 'body' => $this->storeEngine->contactText($store),
                 'body' => '*' . ($store->whatsapp_brand_name ?: $store->name) . "*\n\n" .
-                                $this->storeEngine->contactText($store),
+                    $this->storeEngine->contactText($store),
                 // 'buttons' => $this->mainMenuButtons(),
                 // 'footer' => 'Need anything else?',
             ]];
@@ -86,33 +86,44 @@ class ChatbotEngineService
         if ($command === 'catalog_order_received') {
 
 
-        $pincode = $customer->pincode;
+            $pincode = $customer->pincode;
 
-        if (! $pincode || ! $this->storeEngine->isDeliverable($store, $pincode)) {
+            if (! $pincode || ! $this->storeEngine->isDeliverable($store, $pincode)) {
 
-            return [[
-                'kind' => 'buttons',
-                'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                'body' => "*Delivery not available*\n\nWe currently do not deliver to pincode {$pincode}.\n\nPlease update your location to continue.",
-                'buttons' => [
-                    ['id' => 'change_pincode', 'title' => 'Change Pincode'],
-                    ['id' => 'contact', 'title' => 'Contact'],
-                ],
-                'footer' => 'Location required to proceed.',
-            ]];
-        }
+                return [[
+                    'kind' => 'buttons',
+                    'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                    'body' => "*Delivery not available*\n\nWe currently do not deliver to pincode {$pincode}.\n\nPlease update your location to continue.",
+                    'buttons' => [
+                        ['id' => 'change_pincode', 'title' => 'Change Pincode'],
+                        ['id' => 'contact', 'title' => 'Contact'],
+                    ],
+                    'footer' => 'Location required to proceed.',
+                ]];
+            }
 
-        
+
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->latestOrder($store, $customer);
 
             $responses = [[
                 'kind' => 'text',
-               // 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
+                // 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
-                    $order ? ' *Your order has been placed successfully.= \n ' : 'Your order has been placed.',
-                    $order ? 'Total: ' . MoneyFormatter::format($order->total, $order->currency) : null,
-                    '\n Please confirm the delivery address for this order.',
+                    $order
+                        ? "✅ *Your order has been placed successfully!*"
+                        : "Your order has been placed.",
+
+                    $order
+                        ? "*Order No:* {$order->order_number}"
+                        : null,
+
+                    $order
+                        ? "*Total:* " . MoneyFormatter::format($order->total, $order->currency)
+                        : null,
+
+                    "",
+                    "*Please confirm your delivery address.*",
                 ]))),
                 // 'buttons' => [
                 //     ['id' => 'my_orders', 'title' => 'My Orders'],
@@ -320,7 +331,7 @@ class ChatbotEngineService
             'kind' => 'text',
             //'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => '*' . ($store->whatsapp_brand_name ?: $store->name) . "*\n\n" .
-                     "Welcome 👋\n\nPlease enter 6 digit delivery pincode to continue.",
+                "Welcome 👋\n\nPlease enter 6 digit delivery pincode to continue.",
             // 'buttons' => [
             //     ['id' => 'contact', 'title' => 'Contact'],
             // ],
@@ -331,25 +342,26 @@ class ChatbotEngineService
 
     protected function storefrontMessages(Store $store, Customer $customer, Conversation $conversation): array
     {
-       
-     $pincode = $customer->pincode; // ✅ get stored pincode
-         $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
+
+        $pincode = $customer->pincode; // ✅ get stored pincode
+        $catalogReadiness = $this->storeEngine->whatsappCatalogReadiness($store);
 
         if ($catalogReadiness['ready']) {
             $this->setConversationContext($conversation, [
                 'catalog_sync_pending' => true,
             ]);
 
-            return [               
-            [
-                'kind' => 'text',
-                'body' => "*Delivering to:* {$pincode} 🚚",
-            ],            
-            [
-                'kind' => 'catalog_message',
-                'body' => $this->storeEngine->storeIntroText($store, $pincode),
-                'footer' => 'Open the full store inside WhatsApp.',
-            ]];
+            return [
+                [
+                    'kind' => 'text',
+                    'body' => "*Delivering to:* {$pincode} 🚚",
+                ],
+                [
+                    'kind' => 'catalog_message',
+                    'body' => $this->storeEngine->storeIntroText($store, $pincode),
+                    'footer' => 'Open the full store inside WhatsApp.',
+                ]
+            ];
         }
 
         $this->setConversationContext($conversation, [
