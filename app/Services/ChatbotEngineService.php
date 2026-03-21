@@ -84,52 +84,21 @@ class ChatbotEngineService
         }
 
         if ($command === 'catalog_order_received') {
-
-
-            $pincode = $customer->pincode;
-
-            if (! $pincode || ! $this->storeEngine->isDeliverable($store, $pincode)) {
-
-                return [[
-                    'kind' => 'buttons',
-                    'header_text' => $store->whatsapp_brand_name ?: $store->name,
-                    'body' => "*Delivery not available*\n\nWe currently do not deliver to pincode {$pincode}.\n\nPlease update your location to continue.",
-                    'buttons' => [
-                        ['id' => 'change_pincode', 'title' => 'Change Pincode'],
-                        ['id' => 'contact', 'title' => 'Contact'],
-                    ],
-                    'footer' => 'Location required to proceed.',
-                ]];
-            }
-
-
             $order = $this->storeEngine->latestOpenOrder($store, $customer)
                 ?? $this->storeEngine->latestOrder($store, $customer);
 
             $responses = [[
                 'kind' => 'text',
-                // 'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
                 'body' => trim(implode("\n", array_filter([
                     $order
-                        ? "✅ *Your order has been placed successfully!*"
-                        : "Your order has been placed.",
-
+                        ? 'Your order has been placed successfully.'
+                        : 'Your order has been placed.',
+                    $order?->order_number,
                     $order
-                        ? "*{$order->order_number}*"
+                        ? 'Total: ' . MoneyFormatter::format($order->total, $order->currency)
                         : null,
-
-                    $order
-                        ? "*Total:* " . MoneyFormatter::format($order->total, $order->currency)
-                        : null,
-
-                    "",
-                    "*Please confirm your delivery address.*",
+                    'Please confirm the delivery address for this order.',
                 ]))),
-                // 'buttons' => [
-                //     ['id' => 'my_orders', 'title' => 'My Orders'],
-                //     ['id' => 'visit_store', 'title' => 'Visit Store'],
-                //     ['id' => 'contact', 'title' => 'Contact'],
-                // ],
                 'footer' => 'Order received in WhatsApp.',
             ]];
 
@@ -143,7 +112,7 @@ class ChatbotEngineService
                 $responses[] = $this->promptForAddress(
                     $store,
                     $conversation,
-                    "Please share your delivery address for {$order->order_number}.",
+                    "Please share your delivery address for order {$order->order_number}.",
                     $order->id
                 );
 
@@ -534,7 +503,7 @@ class ChatbotEngineService
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
-                "\n *Send your delivery details in the following format:* \n\n 1st Line-6 digit pincode \n 2nd Line - City \n 3rd Line- Full Address",
+                "Send your delivery details in this format:\n\n700001\nKolkata\n221B Market Road\nNear Central Metro",
             ]))),
             // 'buttons' => [
             //     ['id' => 'view_cart', 'title' => 'View Cart'],
@@ -599,7 +568,7 @@ class ChatbotEngineService
                 'Delivery details saved.',
                 $this->storeEngine->deliverySummary($customer),
                 $orderCreatedAfterSave && $order ? "Order created: {$order->order_number}" : null,
-                'Our store team will contact you shortly.',
+                'Our store team will send your payment link shortly.',
             ]))),
             'buttons' => [               
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
@@ -722,12 +691,13 @@ class ChatbotEngineService
 
         $customer = $this->storeEngine->useSavedAddress($customer, $addressId) ?? $customer;
         $requestedOrderId = (int) data_get($conversation->context, 'awaiting_order_id', 0);
+        $order = null;
 
         if ($requestedOrderId > 0) {
-            $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
+            $order = $this->storeEngine->syncOrderDeliveryById($store, $customer, $requestedOrderId)
                 ?? $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
         } else {
-            $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
+            $order = $this->storeEngine->syncLatestOpenOrderDelivery($store, $customer);
         }
 
         $this->setConversationContext($conversation, [
@@ -738,13 +708,17 @@ class ChatbotEngineService
 
         return [[
             'kind' => 'buttons',
-            'header_text' => $store->whatsapp_brand_name ?: $store->name,
-            'body' => "Address confirmed.\n" . $this->storeEngine->deliverySummary($customer) . "\n\n Our store team will contact shortly.",
+            'header_text' => $order?->order_number ?: ($store->whatsapp_brand_name ?: $store->name),
+            'body' => trim(implode("\n", [
+                'Delivery details saved.',
+                $this->storeEngine->deliverySummary($customer),
+                'Our store team will send your payment link shortly.',
+            ])),
             'buttons' => [
                 ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
-            'footer' => 'Delivery Address Saved.',
+            'footer' => 'Address saved for this order.',
         ]];
     }
 
@@ -822,3 +796,10 @@ class ChatbotEngineService
         return (bool) data_get($conversation->context, 'awaiting_pincode', false);
     }
 }
+
+
+
+
+
+
+

@@ -150,17 +150,11 @@ class StoreEngineService
             return "Deliver to pincode: not saved yet.\nTap Save Address and send pincode on line 1, city on line 2, and the full address below.";
         }
 
-        $parts = array_filter([
-            $delivery['address'] ?? null,
-            $delivery['city'] ?? null,
-            $delivery['pincode'] ?? null,
+        return implode("\n", [
+            'Deliver to pincode: ' . ($delivery['pincode'] ?? 'Not saved'),
+            'City: ' . ($delivery['city'] ?? 'Not saved'),
+            'Address: ' . ($delivery['address'] ?? 'Not saved'),
         ]);
-
-        return $parts
-            ? 'Address: ' . implode(', ', $parts)
-            : 'Address: Not available';
-
-       // return "Deliver to pincode: {$delivery['pincode']}\nCity: {$delivery['city']}\nAddress: {$delivery['address']}";
     }
 
     public function customerAddressBook(Customer $customer): array
@@ -919,8 +913,7 @@ class StoreEngineService
             ->where('store_id', $store->id)
             ->count() + 1;
 
-        // return strtoupper($store->slug) . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-        return strtoupper('order.no') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+        return strtoupper($store->slug) . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
 
 
@@ -936,3 +929,5 @@ class StoreEngineService
         ]);
     }
 }
+
+

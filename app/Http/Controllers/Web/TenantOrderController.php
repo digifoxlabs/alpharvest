@@ -31,25 +31,23 @@ class TenantOrderController extends Controller
     {
     }
 
-    public function requestAddress(Tenant $tenant, Order $order): RedirectResponse
+    public function requestAddress(Request $request, Tenant $tenant, Order $order): RedirectResponse
     {
         abort_unless($order->store && (int) $order->store->tenant_id === (int) $tenant->id, 404);
 
         $this->orderActions->requestAddress($order->loadMissing('store', 'customer', 'conversation'));
 
-        return redirect()
-            ->route('dashboard.show', $tenant)
+        return $this->redirectToTenantPage($request, $tenant)
             ->with('status', "Address request sent for {$order->order_number}.");
     }
 
-    public function sendPaymentLink(Tenant $tenant, Order $order): RedirectResponse
+    public function sendPaymentLink(Request $request, Tenant $tenant, Order $order): RedirectResponse
     {
         abort_unless($order->store && (int) $order->store->tenant_id === (int) $tenant->id, 404);
 
         $this->orderActions->sendPaymentLink($order->loadMissing('store', 'customer', 'conversation'));
 
-        return redirect()
-            ->route('dashboard.show', $tenant)
+        return $this->redirectToTenantPage($request, $tenant)
             ->with('status', "Payment link sent for {$order->order_number}.");
     }
 
@@ -68,8 +66,18 @@ class TenantOrderController extends Controller
             'paid_at' => $validated['payment_status'] === 'paid' ? ($order->paid_at ?: now()) : ($validated['payment_status'] === 'unpaid' ? null : $order->paid_at),
         ])->save();
 
-        return redirect()
-            ->route('dashboard.show', $tenant)
+        return $this->redirectToTenantPage($request, $tenant)
             ->with('status', "Statuses updated for {$order->order_number}.");
+    }
+
+    protected function redirectToTenantPage(Request $request, Tenant $tenant): RedirectResponse
+    {
+        $routeName = (string) $request->input('redirect_route', 'dashboard.show');
+
+        if (in_array($routeName, ['dashboard.show', 'dashboard.inbox', 'dashboard.orders'], true)) {
+            return redirect()->route($routeName, $tenant);
+        }
+
+        return redirect()->route('dashboard.show', $tenant);
     }
 }

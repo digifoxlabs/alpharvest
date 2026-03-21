@@ -5,9 +5,46 @@
 ])
 
 @section('content')
-    <section class="grid columns-2">
+    <section class="panel spotlight">
+        <div>
+            <p class="eyebrow">Catalog structure</p>
+            <h2>Category management</h2>
+            <p class="muted">Create browseable catalog groups, sort them per store, and keep each storefront’s taxonomy clean as the product count grows.</p>
+        </div>
+        <div class="summary-grid">
+            <article class="summary-card">
+                <span class="eyebrow">Categories</span>
+                <strong>{{ $stats['total'] }}</strong>
+                <span class="muted">total categories</span>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Active</span>
+                <strong>{{ $stats['active'] }}</strong>
+                <span class="muted">visible groups</span>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Stores</span>
+                <strong>{{ $stats['stores'] }}</strong>
+                <span class="muted">stores using categories</span>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Filtered</span>
+                <strong>{{ $stats['filtered'] }}</strong>
+                <span class="muted">results in view</span>
+            </article>
+        </div>
+    </section>
+
+    <section class="management-layout">
         <article class="panel">
-            <h2>Create category</h2>
+            <div class="table-header">
+                <div>
+                    <p class="eyebrow">Create</p>
+                    <h2>Create category</h2>
+                    <p class="muted">Set the storefront, category slug, and sort order in one compact card.</p>
+                </div>
+            </div>
+
             <form class="stack" method="POST" action="{{ route('admin.categories.store') }}">
                 @csrf
 
@@ -42,7 +79,7 @@
                         Sort order
                         <input type="number" name="sort_order" value="{{ old('sort_order', 0) }}" min="0" required>
                     </label>
-                    <label class="checkbox" style="margin-top: 30px;">
+                    <label class="checkbox checkbox--padded">
                         <input type="checkbox" name="is_active" value="1" @checked(old('is_active', true))>
                         Category is active
                     </label>
@@ -53,16 +90,63 @@
         </article>
 
         <article class="panel">
-            <h2>Existing categories</h2>
-            <div class="table">
+            <div class="table-header">
+                <div>
+                    <p class="eyebrow">Directory</p>
+                    <h2>Existing categories</h2>
+                    <p class="muted">Filter the taxonomy by store, status, or keyword before editing.</p>
+                </div>
+                <span class="badge subtle">{{ $categories->total() }} matching</span>
+            </div>
+
+            <form class="toolbar toolbar--three" method="GET" action="{{ route('admin.categories.index') }}">
+                <label class="toolbar-field">
+                    Search categories
+                    <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="Name, slug, store, tenant">
+                </label>
+                <label class="toolbar-field">
+                    Store
+                    <select name="store_id">
+                        <option value="">All stores</option>
+                        @foreach ($stores as $store)
+                            <option value="{{ $store->id }}" @selected($filters['store_id'] === (string) $store->id)>{{ $store->tenant?->name }} | {{ $store->name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="toolbar-field">
+                    Status
+                    <select name="status">
+                        <option value="">All statuses</option>
+                        <option value="active" @selected($filters['status'] === 'active')>Active</option>
+                        <option value="inactive" @selected($filters['status'] === 'inactive')>Inactive</option>
+                    </select>
+                </label>
+                <div class="toolbar-actions">
+                    <button type="submit">Apply filters</button>
+                    <a class="button secondary" href="{{ route('admin.categories.index') }}">Reset</a>
+                </div>
+            </form>
+
+            <div class="table entity-table">
                 @forelse ($categories as $category)
-                    <div class="table-row">
-                        <div>
-                            <strong>{{ $category->name }}</strong>
-                            <p class="muted">{{ $category->store?->tenant?->name }} | {{ $category->store?->name }} | {{ $category->slug }}</p>
-                            <p class="muted">{{ $category->products_count }} products | Sort {{ $category->sort_order }} | {{ $category->is_active ? 'Active' : 'Inactive' }}</p>
+                    <div class="entity-row">
+                        <div class="entity-main">
+                            <div class="entity-title">
+                                <strong>{{ $category->name }}</strong>
+                                <span class="badge {{ $category->is_active ? 'success' : 'warning' }}">{{ $category->is_active ? 'Active' : 'Inactive' }}</span>
+                                <span class="badge subtle">Sort {{ $category->sort_order }}</span>
+                            </div>
+                            <div class="entity-meta">
+                                <span>{{ $category->store?->tenant?->name }}</span>
+                                <span>{{ $category->store?->name }}</span>
+                                <span>{{ $category->slug }}</span>
+                            </div>
+                            <p class="entity-copy">{{ $category->description ?: 'No category description yet.' }}</p>
+                            <div class="chip-row">
+                                <span class="badge subtle">{{ $category->products_count }} linked products</span>
+                            </div>
                         </div>
-                        <div class="actions">
+                        <div class="entity-actions">
                             <a class="button secondary" href="{{ route('admin.categories.edit', $category) }}">Edit</a>
                             <form method="POST" action="{{ route('admin.categories.destroy', $category) }}" onsubmit="return confirm('Delete this category? Products will remain but lose the category link.');">
                                 @csrf
@@ -75,6 +159,8 @@
                     <p class="muted">No categories yet.</p>
                 @endforelse
             </div>
+
+            @include('layouts.panel.pagination', ['paginator' => $categories])
         </article>
     </section>
 @endsection

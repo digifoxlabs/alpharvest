@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PlatformController::class, 'home'])->name('platform.home');
 Route::get('/dashboard/{tenant:slug}', [PlatformController::class, 'dashboard'])->name('dashboard.show');
+Route::get('/dashboard/{tenant:slug}/inbox', [PlatformController::class, 'inbox'])->name('dashboard.inbox');
+Route::get('/dashboard/{tenant:slug}/orders', [PlatformController::class, 'orders'])->name('dashboard.orders');
 Route::post('/dashboard/{tenant:slug}/orders/{order}/request-address', [TenantOrderController::class, 'requestAddress'])->name('dashboard.orders.request-address');
 Route::post('/dashboard/{tenant:slug}/orders/{order}/send-payment-link', [TenantOrderController::class, 'sendPaymentLink'])->name('dashboard.orders.send-payment-link');
 Route::post('/dashboard/{tenant:slug}/orders/{order}/status', [TenantOrderController::class, 'updateStatus'])->name('dashboard.orders.update-status');

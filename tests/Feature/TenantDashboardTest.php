@@ -346,4 +346,69 @@ class TenantDashboardTest extends TestCase
             'body' => "NORTHWIND-00001\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOur store team will send your payment link shortly.\nAddress saved for this order.",
         ]);
     }
+    public function test_tenant_inbox_and_orders_have_dedicated_paginated_pages(): void
+    {
+        $tenant = Tenant::factory()->create([
+            'slug' => 'northwind-commerce',
+            'name' => 'Northwind Commerce',
+        ]);
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Northwind Wellness',
+        ]);
+
+        for ($i = 1; $i <= 13; $i++) {
+            $customer = Customer::factory()->create([
+                'store_id' => $store->id,
+                'name' => sprintf('Customer %02d', $i),
+                'phone' => '1555000'.str_pad((string) $i, 4, '0', STR_PAD_LEFT),
+            ]);
+
+            Conversation::create([
+                'store_id' => $store->id,
+                'customer_id' => $customer->id,
+                'status' => 'open',
+                'source' => 'whatsapp',
+                'last_message_at' => now()->subMinutes($i),
+            ]);
+
+            Order::create([
+                'store_id' => $store->id,
+                'customer_id' => $customer->id,
+                'order_number' => sprintf('NORTHWIND-%05d', $i),
+                'status' => 'pending_payment',
+                'payment_status' => 'unpaid',
+                'currency' => 'USD',
+                'subtotal' => 20,
+                'total' => 20,
+                'placed_at' => now()->subMinutes($i),
+            ]);
+        }
+
+        $this->get(route('dashboard.inbox', $tenant))
+            ->assertOk()
+            ->assertSee('Tenant inbox')
+            ->assertSee('Showing 1 to 12 of 13 results')
+            ->assertSee('Customer 01')
+            ->assertDontSee('Customer 13');
+
+        $this->get(route('dashboard.inbox', [$tenant, 'page' => 2]))
+            ->assertOk()
+            ->assertSee('Showing 13 to 13 of 13 results')
+            ->assertSee('Customer 13');
+
+        $this->get(route('dashboard.orders', $tenant))
+            ->assertOk()
+            ->assertSee('Tenant orders')
+            ->assertSee('Showing 1 to 10 of 13 results')
+            ->assertSee('NORTHWIND-00001')
+            ->assertDontSee('NORTHWIND-00013');
+
+        $this->get(route('dashboard.orders', [$tenant, 'page' => 2]))
+            ->assertOk()
+            ->assertSee('Showing 11 to 13 of 13 results')
+            ->assertSee('NORTHWIND-00013');
+    }
 }
+

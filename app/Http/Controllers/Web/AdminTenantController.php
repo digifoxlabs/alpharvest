@@ -11,13 +11,54 @@ use Illuminate\Validation\Rule;
 
 class AdminTenantController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $search = trim((string) $request->input('search'));
+        $status = (string) $request->input('status', '');
+        $plan = (string) $request->input('plan', '');
+
+        $tenantQuery = Tenant::query()->withCount(['stores', 'users']);
+
+        if ($search !== '') {
+            $tenantQuery->where(function ($query) use ($search) {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('plan', 'like', "%{$search}%")
+                    ->orWhere('timezone', 'like', "%{$search}%")
+                    ->orWhere('currency', 'like', "%{$search}%");
+            });
+        }
+
+        if (in_array($status, ['active', 'inactive'], true)) {
+            $tenantQuery->where('is_active', $status === 'active');
+        }
+
+        if ($plan !== '') {
+            $tenantQuery->where('plan', $plan);
+        }
+
+        $tenants = $tenantQuery
+            ->orderBy('name')
+            ->paginate(10)
+            ->withQueryString();
+
         return view('admin.tenants.index', [
-            'tenants' => Tenant::query()
-                ->withCount(['stores', 'users'])
-                ->orderBy('name')
-                ->get(),
+            'tenants' => $tenants,
+            'plans' => Tenant::query()
+                ->select('plan')
+                ->distinct()
+                ->orderBy('plan')
+                ->pluck('plan')
+                ->filter()
+                ->values(),
+            'stats' => [
+                'total' => Tenant::query()->count(),
+                'active' => Tenant::query()->where('is_active', true)->count(),
+                'plans' => Tenant::query()->distinct('plan')->count('plan'),
+                'filtered' => $tenants->total(),
+            ],
+            'filters' => compact('search', 'status', 'plan'),
         ]);
     }
 

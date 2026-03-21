@@ -12,15 +12,57 @@ use Illuminate\Validation\Rule;
 
 class AdminCategoryController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $search = trim((string) $request->input('search'));
+        $status = (string) $request->input('status', '');
+        $storeId = (int) $request->input('store_id', 0);
+
+        $categoryQuery = ProductCategory::query()
+            ->with('store.tenant')
+            ->withCount('products');
+
+        if ($search !== '') {
+            $categoryQuery->where(function ($query) use ($search) {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('store', function ($storeQuery) use ($search) {
+                        $storeQuery
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhereHas('tenant', fn ($tenantQuery) => $tenantQuery->where('name', 'like', "%{$search}%"));
+                    });
+            });
+        }
+
+        if (in_array($status, ['active', 'inactive'], true)) {
+            $categoryQuery->where('is_active', $status === 'active');
+        }
+
+        if ($storeId > 0) {
+            $categoryQuery->where('store_id', $storeId);
+        }
+
+        $categories = $categoryQuery
+            ->orderBy('name')
+            ->paginate(12)
+            ->withQueryString();
+
         return view('admin.categories.index', [
-            'categories' => ProductCategory::query()
-                ->with('store.tenant')
-                ->withCount('products')
-                ->orderBy('name')
-                ->get(),
+            'categories' => $categories,
             'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
+            'stats' => [
+                'total' => ProductCategory::query()->count(),
+                'active' => ProductCategory::query()->where('is_active', true)->count(),
+                'stores' => ProductCategory::query()->distinct('store_id')->count('store_id'),
+                'filtered' => $categories->total(),
+            ],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'store_id' => $storeId > 0 ? (string) $storeId : '',
+            ],
         ]);
     }
 

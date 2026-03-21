@@ -18,20 +18,63 @@ class AdminStoreController extends Controller
     {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $stores = Store::query()
+        $search = trim((string) $request->input('search'));
+        $status = (string) $request->input('status', '');
+        $tenantId = (int) $request->input('tenant_id', 0);
+
+        $storeQuery = Store::query()
             ->with('tenant')
-            ->withCount(['categories', 'products', 'orders'])
-            ->orderBy('name')
-            ->get()
-            ->each(function (Store $store) {
-                $store->setAttribute('catalog_readiness', $this->storeEngine->whatsappCatalogReadiness($store));
+            ->withCount(['categories', 'products', 'orders']);
+
+        if ($search !== '') {
+            $storeQuery->where(function ($query) use ($search) {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('support_phone', 'like', "%{$search}%")
+                    ->orWhere('contact_email', 'like', "%{$search}%")
+                    ->orWhere('contact_phone', 'like', "%{$search}%")
+                    ->orWhere('whatsapp_brand_name', 'like', "%{$search}%")
+                    ->orWhereHas('tenant', fn ($tenantQuery) => $tenantQuery->where('name', 'like', "%{$search}%"));
             });
+        }
+
+        if (in_array($status, ['active', 'inactive'], true)) {
+            $storeQuery->where('is_active', $status === 'active');
+        }
+
+        if ($tenantId > 0) {
+            $storeQuery->where('tenant_id', $tenantId);
+        }
+
+        $stores = $storeQuery
+            ->orderBy('name')
+            ->paginate(8)
+            ->withQueryString();
+
+        $stores->getCollection()->transform(function (Store $store) {
+            $store->setAttribute('catalog_readiness', $this->storeEngine->whatsappCatalogReadiness($store));
+
+            return $store;
+        });
 
         return view('admin.stores.index', [
             'stores' => $stores,
             'tenants' => Tenant::query()->orderBy('name')->get(),
+            'stats' => [
+                'total' => Store::query()->count(),
+                'active' => Store::query()->where('is_active', true)->count(),
+                'catalog_linked' => Store::query()->whereNotNull('meta_catalog_id')->where('meta_catalog_id', '!=', '')->count(),
+                'filtered' => $stores->total(),
+            ],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'tenant_id' => $tenantId > 0 ? (string) $tenantId : '',
+            ],
         ]);
     }
 

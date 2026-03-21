@@ -8,6 +8,7 @@ use App\Models\Store;
 use App\Models\Tenant;
 use App\Services\AgentInboxService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 
 class PlatformController extends Controller
 {
@@ -32,6 +33,43 @@ class PlatformController extends Controller
         return view('dashboard', [
             'tenant' => $tenant,
             'overview' => $this->inbox->tenantOverview($tenant),
+        ]);
+    }
+
+    public function inbox(Request $request, Tenant $tenant): View
+    {
+        $overview = $this->inbox->tenantOverview($tenant);
+        $filters = [
+            'search' => trim((string) $request->input('search')),
+            'status' => (string) $request->input('status', ''),
+            'store_id' => (string) $request->input('store_id', ''),
+        ];
+
+        return view('tenant.inbox', [
+            'tenant' => $tenant,
+            'overview' => $overview,
+            'stores' => $overview['stores'],
+            'filters' => $filters,
+            'conversations' => $this->inbox->tenantConversationPage($tenant, $filters),
+        ]);
+    }
+
+    public function orders(Request $request, Tenant $tenant): View
+    {
+        $overview = $this->inbox->tenantOverview($tenant);
+        $filters = [
+            'search' => trim((string) $request->input('search')),
+            'status' => (string) $request->input('status', ''),
+            'payment_status' => (string) $request->input('payment_status', ''),
+            'store_id' => (string) $request->input('store_id', ''),
+        ];
+
+        return view('tenant.orders', [
+            'tenant' => $tenant,
+            'overview' => $overview,
+            'stores' => $overview['stores'],
+            'filters' => $filters,
+            'orders' => $this->inbox->tenantOrderPage($tenant, $filters),
         ]);
     }
 

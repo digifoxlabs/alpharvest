@@ -14,15 +14,65 @@ use Illuminate\Validation\Rule;
 
 class AdminProductController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $search = trim((string) $request->input('search'));
+        $status = (string) $request->input('status', '');
+        $storeId = (int) $request->input('store_id', 0);
+        $categoryId = (int) $request->input('category_id', 0);
+
+        $productQuery = Product::query()->with(['store.tenant', 'category']);
+
+        if ($search !== '') {
+            $productQuery->where(function ($query) use ($search) {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('meta_retailer_id', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('store', function ($storeQuery) use ($search) {
+                        $storeQuery
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhereHas('tenant', fn ($tenantQuery) => $tenantQuery->where('name', 'like', "%{$search}%"));
+                    })
+                    ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        if (in_array($status, ['active', 'inactive'], true)) {
+            $productQuery->where('is_active', $status === 'active');
+        }
+
+        if ($storeId > 0) {
+            $productQuery->where('store_id', $storeId);
+        }
+
+        if ($categoryId > 0) {
+            $productQuery->where('product_category_id', $categoryId);
+        }
+
+        $products = $productQuery
+            ->orderBy('name')
+            ->paginate(12)
+            ->withQueryString();
+
         return view('admin.products.index', [
-            'products' => Product::query()
-                ->with(['store.tenant', 'category'])
-                ->orderBy('name')
-                ->get(),
+            'products' => $products,
             'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
             'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+            'stats' => [
+                'total' => Product::query()->count(),
+                'active' => Product::query()->where('is_active', true)->count(),
+                'low_stock' => Product::query()->where('inventory_quantity', '<=', 10)->count(),
+                'filtered' => $products->total(),
+            ],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'store_id' => $storeId > 0 ? (string) $storeId : '',
+                'category_id' => $categoryId > 0 ? (string) $categoryId : '',
+            ],
         ]);
     }
 
