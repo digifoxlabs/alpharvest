@@ -869,39 +869,66 @@ class StoreEngineService
         return $order->fresh(['items', 'payments']);
     }
 
+    public function recentOrders(Store $store, Customer $customer, int $limit = 5): Collection
+    {
+        return Order::query()
+            ->where('store_id', $store->id)
+            ->where('customer_id', $customer->id)
+            ->with('items')
+            ->latest('placed_at')
+            ->latest('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    public function findOrderById(Store $store, Customer $customer, int $orderId): ?Order
+    {
+        return Order::query()
+            ->where('id', $orderId)
+            ->where('store_id', $store->id)
+            ->where('customer_id', $customer->id)
+            ->with('items')
+            ->first();
+    }
+
+    public function orderSummary(Order $order): string
+    {
+        $order->loadMissing('items');
+
+        $lines = [
+            "Order: {$order->order_number}",
+            'Status: ' . ucfirst(str_replace('_', ' ', $order->status)),
+            'Payment: ' . ucfirst(str_replace('_', ' ', $order->payment_status)),
+            'Amount: ' . MoneyFormatter::format($order->total, $order->currency),
+        ];
+
+        if ($order->items->isNotEmpty()) {
+            $lines[] = '';
+
+            foreach ($order->items as $item) {
+                $lines[] = "{$item->quantity} x {$item->product_name} = " . MoneyFormatter::format($item->total_price, $order->currency);
+            }
+        }
+
+        $delivery = data_get($order->metadata, 'delivery');
+
+        if (data_get($delivery, 'pincode') || data_get($delivery, 'address')) {
+            $lines[] = '';
+            $lines[] = 'Deliver to pincode: ' . (data_get($delivery, 'pincode') ?: 'Not saved');
+            $lines[] = 'City: ' . (data_get($delivery, 'city') ?: 'Not saved');
+            $lines[] = 'Address: ' . (data_get($delivery, 'address') ?: 'Not saved');
+        }
+
+        return implode("\n", $lines);
+    }
+
     public function currentOrderText(Store $store, Customer $customer, ?Conversation $conversation = null): string
     {
         $order = $this->latestOpenOrder($store, $customer)
             ?? $this->latestOrder($store, $customer);
 
         if ($order) {
-            $order->loadMissing('items');
-
-            $lines = [
-                "Current order: {$order->order_number}",
-                'Status: ' . ucfirst(str_replace('_', ' ', $order->status)),
-                'Payment: ' . ucfirst(str_replace('_', ' ', $order->payment_status)),
-                'Amount: ' . MoneyFormatter::format($order->total, $order->currency),
-            ];
-
-            if ($order->items->isNotEmpty()) {
-                $lines[] = '';
-
-                foreach ($order->items as $item) {
-                    $lines[] = "{$item->quantity} x {$item->product_name} = " . MoneyFormatter::format($item->total_price, $order->currency);
-                }
-            }
-
-            $delivery = data_get($order->metadata, 'delivery');
-
-            if (data_get($delivery, 'pincode') || data_get($delivery, 'address')) {
-                $lines[] = '';
-                $lines[] = 'Deliver to pincode: ' . (data_get($delivery, 'pincode') ?: 'Not saved');
-                $lines[] = 'City: ' . (data_get($delivery, 'city') ?: 'Not saved');
-                $lines[] = 'Address: ' . (data_get($delivery, 'address') ?: 'Not saved');
-            }
-
-            return implode("\n", $lines);
+            return $this->orderSummary($order);
         }
 
         return $this->cartText($store, $customer, $conversation);
@@ -929,5 +956,4 @@ class StoreEngineService
         ]);
     }
 }
-
 

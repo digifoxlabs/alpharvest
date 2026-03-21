@@ -24,7 +24,9 @@ class ChatbotEngineService
         string $incomingText,
         ?string $incomingCommand = null
     ): array {
-        $command = $this->normalizeCommand($incomingCommand ?: $incomingText);
+        $command = $incomingCommand !== null
+            ? Str::of($incomingCommand)->trim()->lower()->toString()
+            : $this->normalizeCommand($incomingText);
         $text = Str::of($incomingText)->trim()->lower()->squish()->toString();
 
         if ($this->isAwaitingPincode($conversation) && ! $incomingCommand) {
@@ -37,6 +39,14 @@ class ChatbotEngineService
 
         if ($addressId = $this->savedAddressCommand($conversation, $command, $incomingCommand)) {
             return $this->handleSavedAddressSelection($store, $customer, $conversation, $addressId);
+        }
+
+        if ($orderId = $this->selectedOrderCommand($command)) {
+            return [$this->orderDetailsMessage($store, $customer, $orderId)];
+        }
+
+        if ($addressId = $this->viewAddressCommand($command)) {
+            return [$this->savedAddressDetailsMessage($store, $customer, $addressId)];
         }
 
         if ($this->isGreeting($command, $text)) {
@@ -54,7 +64,19 @@ class ChatbotEngineService
             return $this->storefrontMessages($store, $customer, $conversation);
         }
 
-        if (in_array($command, ['orders', 'my_orders', 'current_order', 'cart', 'view_cart'], true)) {
+        if ($command === 'help') {
+            return [$this->helpMenuMessage($store)];
+        }
+
+        if (in_array($command, ['orders', 'my_orders'], true)) {
+            return [$this->recentOrdersMessage($store, $customer)];
+        }
+
+        if ($command === 'my_addresses') {
+            return [$this->savedAddressesMessage($store, $customer)];
+        }
+
+        if (in_array($command, ['current_order', 'cart', 'view_cart'], true)) {
             if ($this->isCatalogSyncPending($conversation)) {
                 return [$this->catalogSyncPendingMessage($store)];
             }
@@ -738,6 +760,194 @@ class ChatbotEngineService
     }
 
 
+    protected function helpMenuMessage(Store $store): array
+    {
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => "Choose what you want to review from your WhatsApp account.",
+            'buttons' => [
+                ['id' => 'my_orders', 'title' => 'My Orders'],
+                ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Help menu',
+        ];
+    }
+
+    protected function recentOrdersMessage(Store $store, Customer $customer): array
+    {
+        $orders = $this->storeEngine->recentOrders($store, $customer, 5);
+
+        if ($orders->isEmpty()) {
+            return [
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "You do not have any recent orders yet.",
+                'buttons' => [
+                    ['id' => 'visit_store', 'title' => 'Visit Store'],
+                    ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Recent orders',
+            ];
+        }
+
+        $rows = $orders->map(function (Order $order) {
+            return [
+                'id' => 'show_order:' . $order->id,
+                'title' => Str::limit($order->order_number, 24, ''),
+                'description' => Str::limit(
+                    ucfirst(str_replace('_', ' ', $order->status)) . ' | ' . MoneyFormatter::format($order->total, $order->currency),
+                    72,
+                    ''
+                ),
+            ];
+        })->values()->all();
+
+        return [
+            'kind' => 'list',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => 'Your last 5 orders are shown below. Tap one to see full details.',
+            'button_text' => 'View Orders',
+            'sections' => [[
+                'title' => 'Recent orders',
+                'rows' => $rows,
+            ]],
+            'footer' => 'Latest orders first',
+        ];
+    }
+
+    protected function orderDetailsMessage(Store $store, Customer $customer, int $orderId): array
+    {
+        $order = $this->storeEngine->findOrderById($store, $customer, $orderId);
+
+        if (! $order) {
+            return [
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "That order could not be found anymore.",
+                'buttons' => [
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
+                    ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Order lookup',
+            ];
+        }
+
+        return [
+            'kind' => 'buttons',
+            'header_text' => $order->order_number,
+            'body' => $this->storeEngine->orderSummary($order),
+            'buttons' => [
+                ['id' => 'my_orders', 'title' => 'My Orders'],
+                ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Order details',
+        ];
+    }
+
+    protected function savedAddressesMessage(Store $store, Customer $customer): array
+    {
+        $addresses = $this->storeEngine->customerAddressBook($customer);
+
+        if ($addresses === []) {
+            return [
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "No saved addresses yet. Send a new delivery address during checkout to save one here.",
+                'buttons' => [
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
+                    ['id' => 'visit_store', 'title' => 'Visit Store'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Saved addresses',
+            ];
+        }
+
+        $rows = collect($addresses)->map(function (array $address) {
+            return [
+                'id' => 'show_address:' . $address['id'],
+                'title' => Str::limit($address['pincode'] . ' ' . $address['city'], 24, ''),
+                'description' => Str::limit($address['address'], 72, ''),
+            ];
+        })->values()->all();
+
+        return [
+            'kind' => 'list',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => 'All saved delivery addresses for your account are listed below.',
+            'button_text' => 'View Addresses',
+            'sections' => [[
+                'title' => 'My addresses',
+                'rows' => $rows,
+            ]],
+            'footer' => 'Saved addresses',
+        ];
+    }
+
+    protected function savedAddressDetailsMessage(Store $store, Customer $customer, string $addressId): array
+    {
+        $address = $this->storeEngine->findSavedAddress($customer, $addressId);
+
+        if (! $address) {
+            return [
+                'kind' => 'buttons',
+                'header_text' => $store->whatsapp_brand_name ?: $store->name,
+                'body' => "That saved address could not be found anymore.",
+                'buttons' => [
+                    ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                    ['id' => 'my_orders', 'title' => 'My Orders'],
+                    ['id' => 'contact', 'title' => 'Contact'],
+                ],
+                'footer' => 'Address lookup',
+            ];
+        }
+
+        $deliverable = $this->storeEngine->isDeliverable($store, $address['pincode'], $address['city']);
+
+        return [
+            'kind' => 'buttons',
+            'header_text' => $store->whatsapp_brand_name ?: $store->name,
+            'body' => implode("\n", [
+                'Deliver to pincode: ' . $address['pincode'],
+                'City: ' . $address['city'],
+                'Address: ' . $address['address'],
+                $deliverable ? 'This address is within our delivery area.' : 'This address is currently outside our delivery area.',
+            ]),
+            'buttons' => [
+                ['id' => 'my_addresses', 'title' => 'My Addresses'],
+                ['id' => 'my_orders', 'title' => 'My Orders'],
+                ['id' => 'contact', 'title' => 'Contact'],
+            ],
+            'footer' => 'Saved address details',
+        ];
+    }
+
+    protected function selectedOrderCommand(string $command): ?int
+    {
+        if (! Str::startsWith($command, 'show_order:')) {
+            return null;
+        }
+
+        $orderId = (int) Str::after($command, 'show_order:');
+
+        return $orderId > 0 ? $orderId : null;
+    }
+
+    protected function viewAddressCommand(string $command): ?string
+    {
+        if (! Str::startsWith($command, 'show_address:')) {
+            return null;
+        }
+
+        $addressId = (string) Str::after($command, 'show_address:');
+
+        return $addressId !== '' ? $addressId : null;
+    }
+
     protected function capturePincode(
         Store $store,
         Customer $customer,
@@ -796,10 +1006,4 @@ class ChatbotEngineService
         return (bool) data_get($conversation->context, 'awaiting_pincode', false);
     }
 }
-
-
-
-
-
-
 
