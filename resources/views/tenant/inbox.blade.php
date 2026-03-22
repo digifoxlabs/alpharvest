@@ -80,7 +80,7 @@
 
         <div class="table entity-table">
             @forelse ($conversations as $conversation)
-                <div class="entity-row entity-row--stacked mb-2">
+                <div class="entity-row entity-row--stacked"  style="margin-bottom: 0.75rem;">
                     <div class="entity-main">
                         <div class="entity-title">
                             <strong>{{ $conversation->customer?->name ?: $conversation->customer?->phone }}</strong>
