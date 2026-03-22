@@ -525,7 +525,7 @@ class ChatbotEngineService
             'header_text' => $store->whatsapp_brand_name ?: $store->name,
             'body' => trim(implode("\n\n", array_filter([
                 $prefix,
-                "Send your delivery details in this format:\n\n700001\nKolkata\n221B Market Road\nNear Central Metro",
+                "Send your delivery details in this format:\n\nLine1: Pincode\n Line2: City/Areaa\nLine3: Complete Address",
             ]))),
             // 'buttons' => [
             //     ['id' => 'view_cart', 'title' => 'View Cart'],
