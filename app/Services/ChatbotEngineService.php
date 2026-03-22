@@ -593,6 +593,7 @@ class ChatbotEngineService
                 'Our store team will send your payment link shortly.',
             ]))),
             'buttons' => [               
+                ['id' => 'my_orders', 'title' => 'My Orders'],
                 ['id' => 'visit_store', 'title' => 'Visit Store'],
                 ['id' => 'contact', 'title' => 'Contact'],
             ],
