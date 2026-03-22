@@ -47,6 +47,12 @@ class AdminPanelTest extends TestCase
 
         $tenant = Tenant::query()->where('slug', 'northwind-commerce')->firstOrFail();
 
+        $this->get(route('admin.stores.create'))
+            ->assertOk()
+            ->assertSee('New store')
+            ->assertSee('Tenant')
+            ->assertSee('Store name');
+
         $this->post(route('admin.stores.store'), [
             'tenant_id' => $tenant->id,
             'name' => 'Northwind Wellness',
@@ -86,6 +92,12 @@ class AdminPanelTest extends TestCase
 
         $category = ProductCategory::query()->where('slug', 'wellness')->firstOrFail();
 
+        $this->get(route('admin.products.create'))
+            ->assertOk()
+            ->assertSee('New product')
+            ->assertSee('Store')
+            ->assertSee('Product name');
+
         $this->post(route('admin.products.store'), [
             'store_id' => $store->id,
             'product_category_id' => $category->id,
@@ -94,9 +106,12 @@ class AdminPanelTest extends TestCase
             'sku' => 'CAL-001',
             'meta_retailer_id' => 'catalog-CAL-001',
             'description' => 'Daily support blend.',
+            'color' => 'Forest Green',
+            'size' => '250g',
+            'shipping_weight' => '0.45',
             'image' => UploadedFile::fake()->image('daily-calm.png'),
             'price' => '29.99',
-            'compare_at_price' => '34.99',
+            'sale_price' => '24.99',
             'inventory_quantity' => 25,
             'is_active' => '1',
         ])->assertRedirect(route('admin.products.index'));
@@ -114,8 +129,11 @@ class AdminPanelTest extends TestCase
             'sku' => 'CAL-001',
             'meta_retailer_id' => 'catalog-CAL-001',
             'description' => 'Updated formula.',
+            'color' => 'Midnight Blue',
+            'size' => '300g',
+            'shipping_weight' => '0.55',
             'price' => '31.99',
-            'compare_at_price' => '36.99',
+            'sale_price' => '27.99',
             'inventory_quantity' => 18,
             'is_active' => '1',
         ])->assertRedirect(route('admin.products.index'));
@@ -152,6 +170,10 @@ class AdminPanelTest extends TestCase
             'name' => 'Daily Calm Plus',
             'slug' => 'daily-calm-plus',
             'meta_retailer_id' => 'catalog-CAL-001',
+            'sale_price' => 27.99,
+            'color' => 'Midnight Blue',
+            'size' => '300g',
+            'shipping_weight' => 0.55,
             'price' => 31.99,
             'inventory_quantity' => 18,
         ]);
@@ -214,8 +236,16 @@ class AdminPanelTest extends TestCase
             'delivered_at' => now(),
         ]);
 
+        $this->get(route('admin.products.index'))
+            ->assertOk()
+            ->assertSee('Create new product')
+            ->assertSee('data-category-store', false)
+            ->assertSee('data-category-target', false)
+            ->assertSee('data-store-id="'.$category->store_id.'"', false);
+
         $this->get(route('admin.stores.index'))
             ->assertOk()
+            ->assertSee('Create new store')
             ->assertSee('Native catalog ready')
             ->assertSee('Retailer IDs 1/1');
 
@@ -226,3 +256,5 @@ class AdminPanelTest extends TestCase
             ->assertSee('Catalog sent.');
     }
 }
+
+

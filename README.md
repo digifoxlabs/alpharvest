@@ -83,6 +83,26 @@ The feed exports active products from active stores in CSV format using Meta's c
 - product page `link`
 - product or store `image_link`
 - brand, category, inventory, and sale fields when available
+- optional merchandising fields such as `sale_price`, `color`, `size`, and `shipping_weight`
+
+## Product fields
+
+Products support these pricing and variant-related fields:
+
+- `price` as the base selling price
+- optional `sale_price` when the product is discounted
+- optional `color`
+- optional `size`
+- optional `shipping_weight`
+
+`compare_at_price` is no longer used. When `sale_price` is present, it should be less than or equal to `price`.
+
+The Meta CSV feed at `/feeds/meta-products` includes the new optional fields in these columns:
+
+- `sale_price`
+- `color`
+- `size`
+- `shipping_weight`
 
 The feed file is also written to the public disk at `storage/app/public/feeds/meta-products.csv`.
 

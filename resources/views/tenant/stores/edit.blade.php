@@ -1,7 +1,12 @@
-@extends('admin.layout', [
-    'title' => 'Edit Store',
+@extends('tenant.layout', [
+    'title' => $tenant->name.' Store',
     'heading' => 'Edit store',
-    'subheading' => 'Update tenant assignment, WhatsApp connection settings, and storefront presentation for '.$store->name.'.',
+    'subheading' => 'Update storefront settings, WhatsApp connection details, and presentation for '.$store->name.'.',
+    'headerBadges' => [
+        $store->name,
+        strtoupper($tenant->plan).' plan',
+        'Store settings',
+    ],
 ])
 
 @section('content')
@@ -20,27 +25,23 @@
                     <span class="badge {{ $catalogReadiness['checks']['phone_number_id'] ? 'success' : 'warning' }}">Phone number ID</span>
                     <span class="badge {{ $catalogReadiness['checks']['access_token'] ? 'success' : 'warning' }}">Access token</span>
                     <span class="badge {{ $catalogReadiness['checks']['meta_catalog_id'] ? 'success' : 'warning' }}">Meta catalog ID</span>
-                    <span class="badge {{ $catalogReadiness['checks']['active_products'] ? 'success' : 'warning' }}">
-                        Active products {{ $catalogReadiness['active_products'] }}
-                    </span>
-                    <span class="badge {{ $catalogReadiness['checks']['mapped_products'] ? 'success' : 'warning' }}">
-                        Retailer IDs {{ $catalogReadiness['catalog_products'] }}/{{ $catalogReadiness['active_products'] }}
-                    </span>
+                    <span class="badge {{ $catalogReadiness['checks']['active_products'] ? 'success' : 'warning' }}">Active products {{ $catalogReadiness['active_products'] }}</span>
+                    <span class="badge {{ $catalogReadiness['checks']['mapped_products'] ? 'success' : 'warning' }}">Retailer IDs {{ $catalogReadiness['catalog_products'] }}/{{ $catalogReadiness['active_products'] }}</span>
                 </div>
                 @if ($catalogReadiness['issues'] !== [])
                     <p class="muted">{{ implode(' ', $catalogReadiness['issues']) }}</p>
                 @else
-                    <p class="muted">App-side checks pass. If WhatsApp still does not show the native catalog, confirm the same Meta catalog is linked to this WhatsApp business account inside Commerce Manager.</p>
+                    <p class="muted">App-side checks pass. If WhatsApp still does not show the native catalog, confirm the same Meta catalog is linked inside Commerce Manager.</p>
                 @endif
                 <p class="muted">Product feed: <a href="{{ route('feeds.meta-products') }}" target="_blank">/feeds/meta-products</a></p>
             </div>
 
-            @include('admin.stores._form', [
+            @include('tenant.stores._form', [
                 'store' => $store,
-                'action' => route('admin.stores.update', $store),
+                'action' => route('dashboard.stores.update', [$tenant, $store]),
                 'method' => 'PUT',
                 'submitLabel' => 'Save store',
-                'backUrl' => route('admin.stores.index'),
+                'backUrl' => route('dashboard.stores.index', $tenant),
                 'deliveryZonesText' => $deliveryZonesText,
                 'undeliverableMessage' => data_get($store->settings, 'undeliverable_message'),
             ])

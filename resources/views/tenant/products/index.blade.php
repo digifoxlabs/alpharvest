@@ -1,14 +1,19 @@
-@extends('admin.layout', [
-    'title' => 'Manage Products',
+@extends('tenant.layout', [
+    'title' => $tenant->name.' Products',
     'heading' => 'Manage products',
-    'subheading' => 'Control inventory, pricing, visuals, and cart-ready WhatsApp product cards for each sellable product.',
+    'subheading' => 'Control inventory, pricing, visuals, and WhatsApp-ready product cards for '.$tenant->name.'.',
+    'headerBadges' => [
+        $products->total().' products',
+        strtoupper($tenant->plan).' plan',
+        'Inventory control',
+    ],
 ])
 
 @section('content')
     <section class="panel spotlight">
         <div>
             <p class="eyebrow">Inventory control</p>
-            <h2>Product management</h2>
+            <h2>{{ $tenant->name }} products</h2>
             <p class="muted">Create sellable products, keep retailer IDs in sync for WhatsApp catalogs, and page through inventory by store or category.</p>
         </div>
         <div class="summary-grid">
@@ -40,15 +45,15 @@
             <div>
                 <p class="eyebrow">Directory</p>
                 <h2>Existing products</h2>
-                <p class="muted">Filter the catalog by store, category, keyword, or active state and page through larger inventories.</p>
+                <p class="muted">Filter the tenant catalog by store, category, keyword, or active state and page through larger inventories.</p>
             </div>
             <div class="actions">
                 <span class="badge subtle">{{ $products->total() }} matching</span>
-                <a class="button" href="{{ route('admin.products.create') }}">Create new product</a>
+                <a class="button" href="{{ route('dashboard.products.create', $tenant) }}">Create new product</a>
             </div>
         </div>
 
-        <form class="toolbar toolbar--four" method="GET" action="{{ route('admin.products.index') }}" data-category-scope>
+        <form class="toolbar toolbar--four" method="GET" action="{{ route('dashboard.products.index', $tenant) }}" data-category-scope>
             <label class="toolbar-field">
                 Search products
                 <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="Name, SKU, slug, store, retailer ID">
@@ -58,7 +63,7 @@
                 <select name="store_id" data-category-store>
                     <option value="">All stores</option>
                     @foreach ($stores as $store)
-                        <option value="{{ $store->id }}" @selected($filters['store_id'] === (string) $store->id)>{{ $store->tenant?->name }} | {{ $store->name }}</option>
+                        <option value="{{ $store->id }}" @selected($filters['store_id'] === (string) $store->id)>{{ $store->name }}</option>
                     @endforeach
                 </select>
             </label>
@@ -81,7 +86,7 @@
             </label>
             <div class="toolbar-actions">
                 <button type="submit">Apply filters</button>
-                <a class="button secondary" href="{{ route('admin.products.index') }}">Reset</a>
+                <a class="button secondary" href="{{ route('dashboard.products.index', $tenant) }}">Reset</a>
             </div>
         </form>
 
@@ -95,7 +100,6 @@
                             <span class="badge {{ $product->inventory_quantity <= 10 ? 'warning' : 'success' }}">Qty {{ $product->inventory_quantity }}</span>
                         </div>
                         <div class="entity-meta">
-                            <span>{{ $product->store?->tenant?->name }}</span>
                             <span>{{ $product->store?->name }}</span>
                             <span>{{ $product->category?->name ?: 'Uncategorized' }}</span>
                         </div>
@@ -114,8 +118,8 @@
                         @endif
                     </div>
                     <div class="entity-actions">
-                        <a class="button secondary" href="{{ route('admin.products.edit', $product) }}">Edit</a>
-                        <form method="POST" action="{{ route('admin.products.destroy', $product) }}" onsubmit="return confirm('Delete this product?');">
+                        <a class="button secondary" href="{{ route('dashboard.products.edit', [$tenant, $product]) }}">Edit</a>
+                        <form method="POST" action="{{ route('dashboard.products.destroy', [$tenant, $product]) }}" onsubmit="return confirm('Delete this product?');">
                             @csrf
                             @method('DELETE')
                             <button class="danger" type="submit">Delete</button>

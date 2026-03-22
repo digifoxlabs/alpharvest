@@ -145,9 +145,11 @@
             <p class="eyebrow">{{ $store->whatsapp_brand_name ?: $store->name }}</p>
             <h1>{{ $product->name }}</h1>
             <p class="price">
-                {{ number_format((float) $product->price, 2) }} {{ $store->currency }}
-                @if ($product->compare_at_price && $product->compare_at_price > $product->price)
-                    <span class="compare">{{ number_format((float) $product->compare_at_price, 2) }} {{ $store->currency }}</span>
+                @if ($product->sale_price && $product->sale_price <= $product->price)
+                    {{ number_format((float) $product->sale_price, 2) }} {{ $store->currency }}
+                    <span class="compare">{{ number_format((float) $product->price, 2) }} {{ $store->currency }}</span>
+                @else
+                    {{ number_format((float) $product->price, 2) }} {{ $store->currency }}
                 @endif
             </p>
 
@@ -157,6 +159,9 @@
                 <div>SKU: {{ $product->sku }}</div>
                 <div>Availability: {{ $product->inventory_quantity > 0 ? 'In stock' : 'Out of stock' }}</div>
                 <div>Category: {{ $product->category?->name ?: 'General' }}</div>
+                <div>Color: {{ $product->color ?: 'Not specified' }}</div>
+                <div>Size: {{ $product->size ?: 'Not specified' }}</div>
+                <div>Shipping weight: {{ $product->shipping_weight ? number_format((float) $product->shipping_weight, 2).' kg' : 'Not specified' }}</div>
                 <div>Store: {{ $store->name }}</div>
             </div>
 

@@ -1,9 +1,10 @@
-@php($primaryStore = $overview['stores']->first())
+@php($tenantStores = data_get($overview ?? [], 'stores') ?? collect())
+@php($primaryStore = $tenantStores->first())
 
 @extends('layouts.panel', [
     'title' => $title ?? ($tenant->name.' Dashboard'),
     'heading' => $heading ?? ($tenant->name.' operations'),
-    'subheading' => $subheading ?? 'Track conversations, orders, and store performance from a single responsive workspace.',
+    'subheading' => $subheading ?? 'Track conversations, orders, stores, categories, and products from a single responsive workspace.',
     'brandName' => 'AlphaHarvest',
     'brandLabel' => 'Tenant Workspace',
     'brandCaption' => $tenant->name,
@@ -25,6 +26,24 @@
             'description' => 'Paged order handling',
             'url' => route('dashboard.orders', $tenant),
             'active' => request()->routeIs('dashboard.orders'),
+        ],
+        [
+            'label' => 'Stores',
+            'description' => 'Manage storefronts',
+            'url' => route('dashboard.stores.index', $tenant),
+            'active' => request()->routeIs('dashboard.stores.*'),
+        ],
+        [
+            'label' => 'Categories',
+            'description' => 'Catalog groups',
+            'url' => route('dashboard.categories.index', $tenant),
+            'active' => request()->routeIs('dashboard.categories.*'),
+        ],
+        [
+            'label' => 'Products',
+            'description' => 'Inventory and pricing',
+            'url' => route('dashboard.products.index', $tenant),
+            'active' => request()->routeIs('dashboard.products.*'),
         ],
         [
             'label' => 'Catalog',
@@ -55,5 +74,5 @@
         'Material shell',
     ],
     'sidebarFooter' => 'Tenant dashboard',
-    'footerText' => 'Tenant operations now split overview, inbox, and orders into focused pages.',
+    'footerText' => 'Tenant operations now cover overview, inbox, orders, stores, categories, and products in one shell.',
 ])

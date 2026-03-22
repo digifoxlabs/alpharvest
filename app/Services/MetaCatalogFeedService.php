@@ -127,13 +127,13 @@ class MetaCatalogFeedService
             'sale_price_effective_date' => $metadata['sale_price_effective_date'] ?? '',
             'item_group_id' => $metadata['item_group_id'] ?? '',
             'gender' => $metadata['gender'] ?? '',
-            'color' => $metadata['color'] ?? '',
-            'size' => $metadata['size'] ?? '',
+            'color' => $product->color ?: ($metadata['color'] ?? ''),
+            'size' => $product->size ?: ($metadata['size'] ?? ''),
             'age_group' => $metadata['age_group'] ?? '',
             'material' => $metadata['material'] ?? '',
             'pattern' => $metadata['pattern'] ?? '',
             'shipping' => $metadata['shipping'] ?? '',
-            'shipping_weight' => $metadata['shipping_weight'] ?? '',
+            'shipping_weight' => $product->shipping_weight ? number_format((float) $product->shipping_weight, 2, '.', '').' kg' : ($metadata['shipping_weight'] ?? ''),
             'video[0].url' => $metadata['video_url'] ?? '',
             'video[0].tag[0]' => $metadata['video_tag'] ?? '',
             'gtin' => $metadata['gtin'] ?? '',
@@ -155,17 +155,13 @@ class MetaCatalogFeedService
 
     protected function priceValue(Product $product): float
     {
-        if ($product->compare_at_price && $product->compare_at_price > $product->price) {
-            return (float) $product->compare_at_price;
-        }
-
         return (float) $product->price;
     }
 
     protected function salePriceValue(Product $product): ?float
     {
-        if ($product->compare_at_price && $product->compare_at_price > $product->price) {
-            return (float) $product->price;
+        if ($product->sale_price && $product->sale_price > 0 && $product->sale_price <= $product->price) {
+            return (float) $product->sale_price;
         }
 
         return null;

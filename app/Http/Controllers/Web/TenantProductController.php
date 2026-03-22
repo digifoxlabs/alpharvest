@@ -5,23 +5,32 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductCategory;
-use App\Models\Store;
+use App\Models\Tenant;
+use App\Services\AgentInboxService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
-class AdminProductController extends Controller
+class TenantProductController extends Controller
 {
-    public function index(Request $request): View
+    public function __construct(protected AgentInboxService $inbox)
+    {
+    }
+
+    public function index(Request $request, Tenant $tenant): View
     {
         $search = trim((string) $request->input('search'));
         $status = (string) $request->input('status', '');
         $storeId = (int) $request->input('store_id', 0);
         $categoryId = (int) $request->input('category_id', 0);
 
-        $productQuery = Product::query()->with(['store.tenant', 'category']);
+        $storeIds = $tenant->stores()->pluck('id');
+
+        $productQuery = Product::query()
+            ->whereIn('store_id', $storeIds)
+            ->with(['store', 'category']);
 
         if ($search !== '') {
             $productQuery->where(function ($query) use ($search) {
@@ -33,11 +42,7 @@ class AdminProductController extends Controller
                     ->orWhere('description', 'like', "%{$search}%")
                     ->orWhere('color', 'like', "%{$search}%")
                     ->orWhere('size', 'like', "%{$search}%")
-                    ->orWhereHas('store', function ($storeQuery) use ($search) {
-                        $storeQuery
-                            ->where('name', 'like', "%{$search}%")
-                            ->orWhereHas('tenant', fn ($tenantQuery) => $tenantQuery->where('name', 'like', "%{$search}%"));
-                    })
+                    ->orWhereHas('store', fn ($storeQuery) => $storeQuery->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"));
             });
         }
@@ -59,14 +64,19 @@ class AdminProductController extends Controller
             ->paginate(12)
             ->withQueryString();
 
-        return view('admin.products.index', [
+        $stores = $tenant->stores()->orderBy('name')->get();
+        $categories = ProductCategory::query()->whereIn('store_id', $storeIds)->with('store')->orderBy('name')->get();
+
+        return view('tenant.products.index', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
             'products' => $products,
-            'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
-            'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+            'stores' => $stores,
+            'categories' => $categories,
             'stats' => [
-                'total' => Product::query()->count(),
-                'active' => Product::query()->where('is_active', true)->count(),
-                'low_stock' => Product::query()->where('inventory_quantity', '<=', 10)->count(),
+                'total' => Product::query()->whereIn('store_id', $storeIds)->count(),
+                'active' => Product::query()->whereIn('store_id', $storeIds)->where('is_active', true)->count(),
+                'low_stock' => Product::query()->whereIn('store_id', $storeIds)->where('inventory_quantity', '<=', 10)->count(),
                 'filtered' => $products->total(),
             ],
             'filters' => [
@@ -78,49 +88,63 @@ class AdminProductController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, Tenant $tenant): RedirectResponse
     {
-        $validated = $this->validateProduct($request);
+        $validated = $this->validateProduct($request, $tenant);
         $validated = $this->syncProductImage($request, $validated);
 
         Product::create($validated);
 
         return redirect()
-            ->route('admin.products.index')
+            ->route('dashboard.products.index', $tenant)
             ->with('status', 'Product created.');
     }
 
-    public function create(): View
+    public function create(Tenant $tenant): View
     {
-        return view('admin.products.create', [
-            'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
-            'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+        $storeIds = $tenant->stores()->pluck('id');
+
+        return view('tenant.products.create', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
+            'stores' => $tenant->stores()->orderBy('name')->get(),
+            'categories' => ProductCategory::query()->whereIn('store_id', $storeIds)->with('store')->orderBy('name')->get(),
         ]);
     }
 
-    public function edit(Product $product): View
+    public function edit(Tenant $tenant, Product $product): View
     {
-        return view('admin.products.edit', [
+        $this->ensureTenantProduct($tenant, $product);
+
+        $storeIds = $tenant->stores()->pluck('id');
+
+        return view('tenant.products.edit', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
             'product' => $product->load('store', 'category'),
-            'stores' => Store::query()->with('tenant')->orderBy('name')->get(),
-            'categories' => ProductCategory::query()->with('store')->orderBy('name')->get(),
+            'stores' => $tenant->stores()->orderBy('name')->get(),
+            'categories' => ProductCategory::query()->whereIn('store_id', $storeIds)->with('store')->orderBy('name')->get(),
         ]);
     }
 
-    public function update(Request $request, Product $product): RedirectResponse
+    public function update(Request $request, Tenant $tenant, Product $product): RedirectResponse
     {
-        $validated = $this->validateProduct($request, $product);
+        $this->ensureTenantProduct($tenant, $product);
+
+        $validated = $this->validateProduct($request, $tenant, $product);
         $validated = $this->syncProductImage($request, $validated, $product);
 
         $product->update($validated);
 
         return redirect()
-            ->route('admin.products.index')
+            ->route('dashboard.products.index', $tenant)
             ->with('status', 'Product updated.');
     }
 
-    public function destroy(Product $product): RedirectResponse
+    public function destroy(Tenant $tenant, Product $product): RedirectResponse
     {
+        $this->ensureTenantProduct($tenant, $product);
+
         if ($product->image_path) {
             Storage::disk('public')->delete($product->image_path);
         }
@@ -128,16 +152,24 @@ class AdminProductController extends Controller
         $product->delete();
 
         return redirect()
-            ->route('admin.products.index')
+            ->route('dashboard.products.index', $tenant)
             ->with('status', 'Product deleted.');
     }
 
-    protected function validateProduct(Request $request, ?Product $product = null): array
+    protected function ensureTenantProduct(Tenant $tenant, Product $product): void
+    {
+        abort_unless($product->store()->where('tenant_id', $tenant->id)->exists(), 404);
+    }
+
+    protected function validateProduct(Request $request, Tenant $tenant, ?Product $product = null): array
     {
         $storeId = (int) $request->input('store_id');
 
         $validated = $request->validate([
-            'store_id' => ['required', 'exists:stores,id'],
+            'store_id' => [
+                'required',
+                Rule::exists('stores', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
             'product_category_id' => [
                 'nullable',
                 Rule::exists('product_categories', 'id')->where(fn ($query) => $query->where('store_id', $storeId)),

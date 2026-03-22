@@ -1,15 +1,20 @@
-@extends('admin.layout', [
-    'title' => 'Manage Stores',
+@extends('tenant.layout', [
+    'title' => $tenant->name.' Stores',
     'heading' => 'Manage stores',
-    'subheading' => 'Assign storefronts to tenants, configure the WhatsApp connection, and customize how the store appears in chat.',
+    'subheading' => 'Create and maintain storefronts for '.$tenant->name.' without leaving the tenant workspace.',
+    'headerBadges' => [
+        $stores->total().' stores',
+        strtoupper($tenant->plan).' plan',
+        'Store management',
+    ],
 ])
 
 @section('content')
     <section class="panel spotlight">
         <div>
             <p class="eyebrow">Store operations</p>
-            <h2>Storefront management</h2>
-            <p class="muted">Provision storefronts, wire up WhatsApp credentials, and keep delivery settings and catalog readiness visible in one workspace.</p>
+            <h2>{{ $tenant->name }} storefronts</h2>
+            <p class="muted">Provision storefronts, configure WhatsApp details, and keep delivery settings visible from the tenant side.</p>
         </div>
         <div class="summary-grid">
             <article class="summary-card">
@@ -40,27 +45,18 @@
             <div>
                 <p class="eyebrow">Directory</p>
                 <h2>Existing stores</h2>
-                <p class="muted">Filter by tenant, keyword, or status before drilling into store-level edits.</p>
+                <p class="muted">Filter the tenant storefronts by keyword or status before editing.</p>
             </div>
             <div class="actions">
                 <span class="badge subtle">{{ $stores->total() }} matching</span>
-                <a class="button" href="{{ route('admin.stores.create') }}">Create new store</a>
+                <a class="button" href="{{ route('dashboard.stores.create', $tenant) }}">Create new store</a>
             </div>
         </div>
 
-        <form class="toolbar toolbar--three" method="GET" action="{{ route('admin.stores.index') }}">
+        <form class="toolbar toolbar--three" method="GET" action="{{ route('dashboard.stores.index', $tenant) }}">
             <label class="toolbar-field">
                 Search stores
-                <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="Store, tenant, contact, brand name">
-            </label>
-            <label class="toolbar-field">
-                Tenant
-                <select name="tenant_id">
-                    <option value="">All tenants</option>
-                    @foreach ($tenants as $tenant)
-                        <option value="{{ $tenant->id }}" @selected($filters['tenant_id'] === (string) $tenant->id)>{{ $tenant->name }}</option>
-                    @endforeach
-                </select>
+                <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="Store, contact, brand name">
             </label>
             <label class="toolbar-field">
                 Status
@@ -72,7 +68,7 @@
             </label>
             <div class="toolbar-actions">
                 <button type="submit">Apply filters</button>
-                <a class="button secondary" href="{{ route('admin.stores.index') }}">Reset</a>
+                <a class="button secondary" href="{{ route('dashboard.stores.index', $tenant) }}">Reset</a>
             </div>
         </form>
 
@@ -87,9 +83,9 @@
                             <span class="badge {{ $store->is_active ? 'success' : 'warning' }}">{{ $store->is_active ? 'Active' : 'Inactive' }}</span>
                         </div>
                         <div class="entity-meta">
-                            <span>{{ $store->tenant?->name }}</span>
                             <span>{{ $store->slug }}</span>
                             <span>{{ $store->currency }}</span>
+                            <span>{{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</span>
                         </div>
                         <p class="entity-copy">{{ $store->description ?: 'No store description added yet.' }}</p>
                         <div class="chip-row">
@@ -104,17 +100,16 @@
                             <span class="badge {{ $readiness['checks']['access_token'] ? 'success' : 'warning' }}">Access token</span>
                             <span class="badge {{ $readiness['checks']['meta_catalog_id'] ? 'success' : 'warning' }}">Catalog ID</span>
                             <span class="badge {{ $readiness['checks']['active_products'] ? 'success' : 'warning' }}">Active products {{ $readiness['active_products'] }}</span>
-                            <span class="badge {{ $readiness['checks']['mapped_products'] ? 'success' : 'warning' }}">Retailer IDs {{ $readiness['catalog_products'] }}/{{ $readiness['active_products'] }}</span>
                         </div>
-                        <p class="muted">{{ $store->contact_email ?: 'No email' }} | {{ $store->contact_phone ?: $store->support_phone ?: 'No phone' }}</p>
+                        <p class="muted">{{ $store->contact_email ?: 'No email' }}</p>
                         <p class="muted">{{ $readiness['issues'] !== [] ? implode(' ', $readiness['issues']) : 'This store meets the app-side checks for the native WhatsApp multi-product catalog.' }}</p>
                         @if ($store->whatsapp_store_image_url)
                             <img src="{{ $store->whatsapp_store_image_url }}" alt="{{ $store->name }}" class="thumb">
                         @endif
                     </div>
                     <div class="entity-actions">
-                        <a class="button secondary" href="{{ route('admin.stores.edit', $store) }}">Edit</a>
-                        <form method="POST" action="{{ route('admin.stores.destroy', $store) }}" onsubmit="return confirm('Delete this store and all dependent data?');">
+                        <a class="button secondary" href="{{ route('dashboard.stores.edit', [$tenant, $store]) }}">Edit</a>
+                        <form method="POST" action="{{ route('dashboard.stores.destroy', [$tenant, $store]) }}" onsubmit="return confirm('Delete this store and all dependent data?');">
                             @csrf
                             @method('DELETE')
                             <button class="danger" type="submit">Delete</button>

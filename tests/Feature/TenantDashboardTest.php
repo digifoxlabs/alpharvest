@@ -7,6 +7,8 @@ use App\Models\Conversation;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\Store;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -346,6 +348,165 @@ class TenantDashboardTest extends TestCase
             'body' => "NORTHWIND-00001\nDelivery details saved.\nDeliver to pincode: 700001\nCity: Kolkata\nAddress: 221B Market Road\nNear Central Metro\nOur store team will send your payment link shortly.\nAddress saved for this order.",
         ]);
     }
+    public function test_tenant_sidebar_shows_store_category_and_product_links(): void
+    {
+        $tenant = Tenant::factory()->create([
+            'slug' => 'northwind-commerce',
+            'name' => 'Northwind Commerce',
+        ]);
+
+        Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Northwind Wellness',
+        ]);
+
+        $this->get(route('dashboard.show', $tenant))
+            ->assertOk()
+            ->assertSee('Stores')
+            ->assertSee('Categories')
+            ->assertSee('Products')
+            ->assertSee('Manage stores')
+            ->assertSee('Manage categories')
+            ->assertSee('Manage products');
+    }
+
+    public function test_tenant_can_manage_only_its_stores_categories_and_products(): void
+    {
+        $tenant = Tenant::factory()->create([
+            'slug' => 'northwind-commerce',
+            'name' => 'Northwind Commerce',
+            'currency' => 'USD',
+        ]);
+
+        $otherTenant = Tenant::factory()->create([
+            'slug' => 'southwind-commerce',
+            'name' => 'Southwind Commerce',
+            'currency' => 'USD',
+        ]);
+
+        $store = Store::factory()->create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Northwind Wellness',
+            'slug' => 'northwind-wellness',
+            'currency' => 'USD',
+        ]);
+
+        $otherStore = Store::factory()->create([
+            'tenant_id' => $otherTenant->id,
+            'name' => 'Southwind Wellness',
+            'slug' => 'southwind-wellness',
+            'currency' => 'USD',
+        ]);
+
+        $category = ProductCategory::factory()->create([
+            'store_id' => $store->id,
+            'name' => 'Wellness',
+            'slug' => 'wellness',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Focus Shot',
+            'slug' => 'focus-shot',
+            'sku' => 'FOC-001',
+        ]);
+
+        ProductCategory::factory()->create([
+            'store_id' => $otherStore->id,
+            'name' => 'Tea',
+            'slug' => 'tea',
+        ]);
+
+        Product::factory()->create([
+            'store_id' => $otherStore->id,
+            'name' => 'Southwind Tea',
+            'slug' => 'southwind-tea',
+            'sku' => 'SWT-001',
+        ]);
+
+        $this->get(route('dashboard.stores.index', $tenant))
+            ->assertOk()
+            ->assertSee('Northwind Wellness')
+            ->assertDontSee('Southwind Wellness');
+
+        $this->get(route('dashboard.categories.index', $tenant))
+            ->assertOk()
+            ->assertSee('Wellness')
+            ->assertDontSee('Southwind Wellness');
+
+        $this->get(route('dashboard.products.index', $tenant))
+            ->assertOk()
+            ->assertSee('Focus Shot')
+            ->assertDontSee('Southwind Tea')
+            ->assertSee('Create new product')
+            ->assertSee('data-category-store', false)
+            ->assertSee('data-category-target', false)
+            ->assertSee('data-store-id="'.$category->store_id.'"', false);
+
+        $this->get(route('dashboard.stores.create', $tenant))
+            ->assertOk()
+            ->assertSee('New store')
+            ->assertSee('Store name');
+
+        $this->get(route('dashboard.products.create', $tenant))
+            ->assertOk()
+            ->assertSee('New product')
+            ->assertSee('Create or manage stores')
+            ->assertSee('Create or manage categories')
+            ->assertSee('Product name');
+
+        $this->post(route('dashboard.stores.store', $tenant), [
+            'name' => 'Northwind Express',
+            'slug' => 'northwind-express',
+            'currency' => 'usd',
+            'description' => 'Second storefront',
+            'is_active' => '1',
+        ])->assertRedirect(route('dashboard.stores.index', $tenant));
+
+        $createdStore = Store::query()->where('slug', 'northwind-express')->firstOrFail();
+        $this->assertSame($tenant->id, $createdStore->tenant_id);
+        $this->assertSame('USD', $createdStore->currency);
+
+        $this->post(route('dashboard.categories.store', $tenant), [
+            'store_id' => $store->id,
+            'name' => 'Boosters',
+            'slug' => 'boosters',
+            'sort_order' => 1,
+            'is_active' => '1',
+        ])->assertRedirect(route('dashboard.categories.index', $tenant));
+
+        $this->assertDatabaseHas('product_categories', [
+            'store_id' => $store->id,
+            'name' => 'Boosters',
+            'slug' => 'boosters',
+        ]);
+
+        $this->post(route('dashboard.products.store', $tenant), [
+            'store_id' => $store->id,
+            'product_category_id' => $category->id,
+            'name' => 'Calm Drops',
+            'slug' => 'calm-drops',
+            'sku' => 'CALM-001',
+            'price' => '12.50',
+            'inventory_quantity' => 15,
+            'is_active' => '1',
+        ])->assertRedirect(route('dashboard.products.index', $tenant));
+
+        $this->assertDatabaseHas('products', [
+            'store_id' => $store->id,
+            'name' => 'Calm Drops',
+            'slug' => 'calm-drops',
+            'sku' => 'CALM-001',
+        ]);
+
+        $this->post(route('dashboard.categories.store', $tenant), [
+            'store_id' => $otherStore->id,
+            'name' => 'Leak Attempt',
+            'slug' => 'leak-attempt',
+            'sort_order' => 2,
+        ])->assertSessionHasErrors('store_id');
+    }
     public function test_tenant_inbox_and_orders_have_dedicated_paginated_pages(): void
     {
         $tenant = Tenant::factory()->create([
@@ -411,4 +572,8 @@ class TenantDashboardTest extends TestCase
             ->assertSee('NORTHWIND-00013');
     }
 }
+
+
+
+
 

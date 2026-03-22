@@ -12,8 +12,8 @@
             <p class="eyebrow">Tenant command center</p>
             <h2>{{ $tenant->name }} SaaS dashboard</h2>
             <p class="muted">
-                This overview keeps store health, current conversations, and recent orders within reach,
-                while inbox and orders now have their own paged workspaces for high-volume handling.
+                This overview keeps store health, current conversations, recent orders, and tenant-side catalog management within reach,
+                while inbox and orders still have their own paged workspaces for high-volume handling.
             </p>
             <div class="actions" style="margin-top: 1rem;">
                 <a class="button secondary" href="{{ route('dashboard.inbox', $tenant) }}">Open inbox</a>
@@ -52,6 +52,55 @@
             <strong>{{ number_format((float) $overview['metrics']['recent_order_value'], 2) }}</strong>
             <span class="muted">recent order value</span>
         </article>
+    </section>
+
+    <section class="panel">
+        <div class="table-header">
+            <div>
+                <p class="eyebrow">Manage workspace</p>
+                <h2>Tenant catalog and storefront tools</h2>
+                <p class="muted">Jump directly into the tenant-owned CRUD surfaces for stores, categories, and products.</p>
+            </div>
+        </div>
+
+        <div class="summary-grid" style="margin-top: 1.25rem;">
+            <article class="summary-card">
+                <span class="eyebrow">Stores</span>
+                <strong>{{ $overview['metrics']['stores'] }}</strong>
+                <span class="muted">Configure storefront settings, WhatsApp IDs, and delivery zones.</span>
+                <div class="actions">
+                    <a class="button secondary" href="{{ route('dashboard.stores.index', $tenant) }}">Manage stores</a>
+                </div>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Categories</span>
+                <strong>{{ $overview['stores']->sum('categories_count') }}</strong>
+                <span class="muted">Shape store-level catalog groupings and browsing order.</span>
+                <div class="actions">
+                    <a class="button secondary" href="{{ route('dashboard.categories.index', $tenant) }}">Manage categories</a>
+                </div>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Products</span>
+                <strong>{{ $overview['metrics']['products'] }}</strong>
+                <span class="muted">Keep pricing, stock, and WhatsApp catalog mapping current.</span>
+                <div class="actions">
+                    <a class="button" href="{{ route('dashboard.products.index', $tenant) }}">Manage products</a>
+                </div>
+            </article>
+            <article class="summary-card">
+                <span class="eyebrow">Public catalog</span>
+                <strong>{{ $overview['stores']->first()?->name ?: 'No store yet' }}</strong>
+                <span class="muted">Open the storefront your customers see and verify how the catalog feels live.</span>
+                <div class="actions">
+                    @if ($overview['stores']->first())
+                        <a class="button secondary" href="{{ route('platform.catalog', $overview['stores']->first()) }}">Open catalog</a>
+                    @else
+                        <span class="badge subtle">Create a store first</span>
+                    @endif
+                </div>
+            </article>
+        </div>
     </section>
 
     <section class="grid columns-2">
@@ -147,6 +196,7 @@
                     <p class="eyebrow">Stores</p>
                     <h2>Store performance</h2>
                 </div>
+                <a class="button secondary" href="{{ route('dashboard.stores.index', $tenant) }}">Open store manager</a>
             </div>
 
             <div class="table">

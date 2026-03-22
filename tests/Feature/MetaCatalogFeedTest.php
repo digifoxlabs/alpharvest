@@ -39,6 +39,10 @@ class MetaCatalogFeedTest extends TestCase
             'sku' => 'MTA-001',
             'meta_retailer_id' => 'catalog-MTA-001',
             'price' => 22.50,
+            'sale_price' => 18.50,
+            'color' => 'Hazel',
+            'size' => '250g',
+            'shipping_weight' => 0.75,
             'inventory_quantity' => 15,
             'is_active' => true,
         ]);
@@ -59,6 +63,10 @@ class MetaCatalogFeedTest extends TestCase
         $response->assertSee('id,title,description,availability,condition,price', false);
         $response->assertSee('catalog-MTA-001', false);
         $response->assertSee('22.50 USD', false);
+        $response->assertSee('18.50 USD', false);
+        $response->assertSee('Hazel', false);
+        $response->assertSee('250g', false);
+        $response->assertSee('0.75 kg', false);
         $response->assertDontSee('MTA-002', false);
 
         Storage::disk('public')->assertExists('feeds/meta-products.csv');
@@ -93,6 +101,10 @@ class MetaCatalogFeedTest extends TestCase
             'sku' => 'SYNC-001',
             'meta_retailer_id' => 'catalog-SYNC-001',
             'price' => 19.99,
+            'sale_price' => 16.99,
+            'color' => 'Cobalt',
+            'size' => 'Starter Pack',
+            'shipping_weight' => 1.25,
             'inventory_quantity' => 10,
         ]);
 
@@ -129,3 +141,4 @@ class MetaCatalogFeedTest extends TestCase
         });
     }
 }
+

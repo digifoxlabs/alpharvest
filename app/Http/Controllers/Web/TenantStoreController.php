@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Store;
 use App\Models\Tenant;
+use App\Services\AgentInboxService;
 use App\Services\StoreEngineService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -12,20 +13,20 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
-class AdminStoreController extends Controller
+class TenantStoreController extends Controller
 {
-    public function __construct(protected StoreEngineService $storeEngine)
-    {
+    public function __construct(
+        protected AgentInboxService $inbox,
+        protected StoreEngineService $storeEngine,
+    ) {
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, Tenant $tenant): View
     {
         $search = trim((string) $request->input('search'));
         $status = (string) $request->input('status', '');
-        $tenantId = (int) $request->input('tenant_id', 0);
 
-        $storeQuery = Store::query()
-            ->with('tenant')
+        $storeQuery = $tenant->stores()
             ->withCount(['categories', 'products', 'orders']);
 
         if ($search !== '') {
@@ -37,17 +38,12 @@ class AdminStoreController extends Controller
                     ->orWhere('support_phone', 'like', "%{$search}%")
                     ->orWhere('contact_email', 'like', "%{$search}%")
                     ->orWhere('contact_phone', 'like', "%{$search}%")
-                    ->orWhere('whatsapp_brand_name', 'like', "%{$search}%")
-                    ->orWhereHas('tenant', fn ($tenantQuery) => $tenantQuery->where('name', 'like', "%{$search}%"));
+                    ->orWhere('whatsapp_brand_name', 'like', "%{$search}%");
             });
         }
 
         if (in_array($status, ['active', 'inactive'], true)) {
             $storeQuery->where('is_active', $status === 'active');
-        }
-
-        if ($tenantId > 0) {
-            $storeQuery->where('tenant_id', $tenantId);
         }
 
         $stores = $storeQuery
@@ -61,68 +57,78 @@ class AdminStoreController extends Controller
             return $store;
         });
 
-        return view('admin.stores.index', [
+        return view('tenant.stores.index', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
             'stores' => $stores,
-            'tenants' => Tenant::query()->orderBy('name')->get(),
             'stats' => [
-                'total' => Store::query()->count(),
-                'active' => Store::query()->where('is_active', true)->count(),
-                'catalog_linked' => Store::query()->whereNotNull('meta_catalog_id')->where('meta_catalog_id', '!=', '')->count(),
+                'total' => $tenant->stores()->count(),
+                'active' => $tenant->stores()->where('is_active', true)->count(),
+                'catalog_linked' => $tenant->stores()->whereNotNull('meta_catalog_id')->where('meta_catalog_id', '!=', '')->count(),
                 'filtered' => $stores->total(),
             ],
             'filters' => [
                 'search' => $search,
                 'status' => $status,
-                'tenant_id' => $tenantId > 0 ? (string) $tenantId : '',
             ],
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, Tenant $tenant): RedirectResponse
     {
         $validated = $this->validateStore($request);
+        $validated['tenant_id'] = $tenant->id;
         $validated = $this->syncStoreImage($request, $validated);
         $validated = $this->syncStoreSettings($validated);
 
         Store::create($validated);
 
         return redirect()
-            ->route('admin.stores.index')
+            ->route('dashboard.stores.index', $tenant)
             ->with('status', 'Store created.');
     }
 
-    public function create(): View
+    public function create(Tenant $tenant): View
     {
-        return view('admin.stores.create', [
-            'tenants' => Tenant::query()->orderBy('name')->get(),
+        return view('tenant.stores.create', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
         ]);
     }
 
-    public function edit(Store $store): View
+    public function edit(Tenant $tenant, Store $store): View
     {
-        return view('admin.stores.edit', [
+        $this->ensureTenantStore($tenant, $store);
+
+        return view('tenant.stores.edit', [
+            'tenant' => $tenant,
+            'overview' => $this->inbox->tenantOverview($tenant),
             'store' => $store,
             'catalogReadiness' => $this->storeEngine->whatsappCatalogReadiness($store),
             'deliveryZonesText' => $this->deliveryZonesText($store),
-            'tenants' => Tenant::query()->orderBy('name')->get(),
         ]);
     }
 
-    public function update(Request $request, Store $store): RedirectResponse
+    public function update(Request $request, Tenant $tenant, Store $store): RedirectResponse
     {
+        $this->ensureTenantStore($tenant, $store);
+
         $validated = $this->validateStore($request, $store);
+        $validated['tenant_id'] = $tenant->id;
         $validated = $this->syncStoreImage($request, $validated, $store);
         $validated = $this->syncStoreSettings($validated, $store);
 
         $store->update($validated);
 
         return redirect()
-            ->route('admin.stores.index')
+            ->route('dashboard.stores.index', $tenant)
             ->with('status', 'Store updated.');
     }
 
-    public function destroy(Store $store): RedirectResponse
+    public function destroy(Tenant $tenant, Store $store): RedirectResponse
     {
+        $this->ensureTenantStore($tenant, $store);
+
         if ($store->whatsapp_store_image_path) {
             Storage::disk('public')->delete($store->whatsapp_store_image_path);
         }
@@ -130,14 +136,18 @@ class AdminStoreController extends Controller
         $store->delete();
 
         return redirect()
-            ->route('admin.stores.index')
+            ->route('dashboard.stores.index', $tenant)
             ->with('status', 'Store deleted.');
+    }
+
+    protected function ensureTenantStore(Tenant $tenant, Store $store): void
+    {
+        abort_unless($store->tenant_id === $tenant->id, 404);
     }
 
     protected function validateStore(Request $request, ?Store $store = null): array
     {
         $validated = $request->validate([
-            'tenant_id' => ['required', 'exists:tenants,id'],
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', Rule::unique('stores', 'slug')->ignore($store?->id)],
             'support_phone' => ['nullable', 'string', 'max:50'],

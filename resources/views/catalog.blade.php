@@ -73,13 +73,28 @@
             display: grid;
             gap: 10px;
         }
+        .price-stack {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 10px;
+        }
         .price {
             color: var(--accent);
             font-weight: 700;
         }
+        .price-original {
+            color: var(--muted);
+            text-decoration: line-through;
+        }
         .meta {
             color: var(--muted);
             font-size: 0.95rem;
+        }
+        .attribute-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
         .tag {
             display: inline-flex;
@@ -117,7 +132,25 @@
                             <article class="product">
                                 <h3>{{ $product->name }}</h3>
                                 <div class="meta">{{ $product->sku }}</div>
-                                <div class="price">{{ $store->currency }} {{ number_format((float) $product->price, 2) }}</div>
+                                <div class="price-stack">
+                                    @if ($product->sale_price && $product->sale_price > 0 && $product->sale_price <= $product->price)
+                                        <div class="price">{{ $store->currency }} {{ number_format((float) $product->sale_price, 2) }}</div>
+                                        <div class="price-original">{{ $store->currency }} {{ number_format((float) $product->price, 2) }}</div>
+                                    @else
+                                        <div class="price">{{ $store->currency }} {{ number_format((float) $product->price, 2) }}</div>
+                                    @endif
+                                </div>
+                                <div class="attribute-list">
+                                    @if ($product->color)
+                                        <span class="tag">Color: {{ $product->color }}</span>
+                                    @endif
+                                    @if ($product->size)
+                                        <span class="tag">Size: {{ $product->size }}</span>
+                                    @endif
+                                    @if ($product->shipping_weight)
+                                        <span class="tag">Weight: {{ number_format((float) $product->shipping_weight, 2) }} kg</span>
+                                    @endif
+                                </div>
                                 <p class="meta">{{ $product->description ?: 'Product details will appear here in the next webstore version.' }}</p>
                             </article>
                         @empty

@@ -50,4 +50,46 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (typeof desktopMedia.addListener === 'function') {
         desktopMedia.addListener(syncDesktopState);
     }
+
+    const categoryScopes = document.querySelectorAll('[data-category-scope]');
+
+    categoryScopes.forEach((scope) => {
+        const storeSelect = scope.querySelector('[data-category-store]');
+        const categorySelect = scope.querySelector('[data-category-target]');
+
+        if (!storeSelect || !categorySelect) {
+            return;
+        }
+
+        const syncCategories = () => {
+            const selectedStoreId = storeSelect.value;
+            let hasVisibleCategory = false;
+
+            Array.from(categorySelect.options).forEach((option, index) => {
+                const optionStoreId = option.dataset.storeId || '';
+                const isPlaceholder = index === 0 || optionStoreId === '';
+                const matches = selectedStoreId === '' || optionStoreId === selectedStoreId;
+                const shouldShow = isPlaceholder || matches;
+
+                option.hidden = !shouldShow;
+                option.disabled = !shouldShow;
+
+                if (!isPlaceholder && shouldShow) {
+                    hasVisibleCategory = true;
+                }
+            });
+
+            const selectedOption = categorySelect.selectedOptions[0];
+            const selectedOptionStoreId = selectedOption?.dataset.storeId || '';
+
+            if (selectedOption && selectedOptionStoreId !== '' && selectedStoreId !== '' && selectedOptionStoreId !== selectedStoreId) {
+                categorySelect.value = '';
+            }
+
+            categorySelect.toggleAttribute('data-empty', !hasVisibleCategory && selectedStoreId !== '');
+        };
+
+        storeSelect.addEventListener('change', syncCategories);
+        syncCategories();
+    });
 });
