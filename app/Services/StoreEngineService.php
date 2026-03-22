@@ -59,8 +59,8 @@ class StoreEngineService
                         'meta_retailer_id' => $product->meta_retailer_id,
                         'description' => $product->description,
                         'image_url' => $product->image_url,
-                        'price' => $product->price,
-                        'formatted_price' => MoneyFormatter::format($product->price, $store->currency),
+                        'price' => $product->sale_price,
+                        'formatted_price' => MoneyFormatter::format($product->sale_price, $store->currency),
                         'inventory_quantity' => $product->inventory_quantity,
                     ]),
                 ];
@@ -84,7 +84,7 @@ class StoreEngineService
         ];
 
         foreach ($this->featuredProducts($store, 6) as $product) {
-            $lines[] = "{$product->sku} | {$product->name} | " . MoneyFormatter::format($product->price, $store->currency);
+            $lines[] = "{$product->sku} | {$product->name} | " . MoneyFormatter::format($product->sale_price, $store->currency);
         }
 
         return implode("\n", $lines);
@@ -486,7 +486,7 @@ class StoreEngineService
                     ->map(fn(Product $product) => [
                         'id' => 'add_to_cart:' . $product->id,
                         'title' => Str::limit($product->name, 24, ''),
-                        'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->price, $store->currency), 72, ''),
+                        'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->sale_price, $store->currency), 72, ''),
                     ])
                     ->values()
                     ->all(),
@@ -512,7 +512,7 @@ class StoreEngineService
             'rows' => $products->map(fn(Product $product) => [
                 'id' => 'add_to_cart:' . $product->id,
                 'title' => Str::limit($product->name, 24, ''),
-                'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->price, $store->currency), 72, ''),
+                'description' => Str::limit($product->sku . ' | ' . MoneyFormatter::format($product->sale_price, $store->currency), 72, ''),
             ])->values()->all(),
         ]];
     }
@@ -628,8 +628,8 @@ class StoreEngineService
 
             $item->fill([
                 'quantity' => $newQuantity,
-                'unit_price' => $product->price,
-                'total_price' => $product->price * $newQuantity,
+                'unit_price' => $product->sale_price,
+                'total_price' => $product->sale_price * $newQuantity,
             ])->save();
 
             return $this->refreshCartTotals($cart);
@@ -671,8 +671,8 @@ class StoreEngineService
                     'cart_id' => $cart->id,
                     'product_id' => $item['product']->id,
                     'quantity' => $item['quantity'],
-                    'unit_price' => $item['product']->price,
-                    'total_price' => $item['product']->price * $item['quantity'],
+                    'unit_price' => $item['product']->sale_price,
+                    'total_price' => $item['product']->sale_price * $item['quantity'],
                 ]);
             }
 
