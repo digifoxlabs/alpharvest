@@ -90,7 +90,7 @@
 
         <div class="table entity-table entity-table--stacked">
             @forelse ($orders as $order)
-                <div class="entity-row entity-row--stacked mb-2">
+                <div class="entity-row entity-row--stacked" style="margin-bottom: 0.25rem;">
                     <div class="entity-main">
                         <div class="entity-title">
                             <strong>{{ $order->order_number }}</strong>
