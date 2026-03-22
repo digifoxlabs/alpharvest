@@ -169,3 +169,8 @@ Run tests with:
 ```bash
 php artisan test
 ```
+
+## Clear Tables
+php artisan make:command ClearTables
+
+bash: php artisan clear:tables
