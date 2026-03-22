@@ -10,7 +10,7 @@
 ])
 
 @section('content')
-    <section class="panel spotlight">
+    {{-- <section class="panel spotlight">
         <div>
             <p class="eyebrow">Orders workspace</p>
             <h2>Recent and active orders</h2>
@@ -38,7 +38,7 @@
                 <span class="muted">results in view</span>
             </article>
         </div>
-    </section>
+    </section> --}}
 
     <section class="panel">
         <div class="table-header">
@@ -90,7 +90,7 @@
 
         <div class="table entity-table entity-table--stacked">
             @forelse ($orders as $order)
-                <div class="entity-row entity-row--stacked">
+                <div class="entity-row entity-row--stacked mb-2">
                     <div class="entity-main">
                         <div class="entity-title">
                             <strong>{{ $order->order_number }}</strong>

@@ -5,8 +5,8 @@
     'title' => $title ?? ($tenant->name.' Dashboard'),
     'heading' => $heading ?? ($tenant->name.' operations'),
     'subheading' => $subheading ?? 'Track conversations, orders, stores, categories, and products from a single responsive workspace.',
-    'brandName' => 'AlphaHarvest',
-    'brandLabel' => 'Tenant Workspace',
+    'brandName' => 'Alp Harvest',
+    'brandLabel' => 'Store Workspace',
     'brandCaption' => $tenant->name,
     'navigation' => [
         [
